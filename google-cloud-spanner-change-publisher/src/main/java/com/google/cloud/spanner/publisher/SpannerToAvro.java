@@ -30,6 +30,7 @@ import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
+import com.google.common.util.concurrent.Futures;
 import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -84,7 +85,7 @@ class SpannerToAvro {
   }
 
   private SchemaSet createSchemaSet() {
-    String tsColName = SpannerUtils.getTimestampColumn(client, table);
+    String tsColName = Futures.getUnchecked(SpannerUtils.getTimestampColumn(client, table));
     try (ResultSet resultSet = client.singleUse().executeQuery(statement)) {
       return convertTableToSchemaSet(table, "avroNamespace", resultSet, tsColName);
     }

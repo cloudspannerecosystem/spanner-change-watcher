@@ -16,8 +16,8 @@
 
 package com.google.cloud.spanner.watcher;
 
+import com.google.api.core.AbstractApiService;
 import com.google.api.core.ApiFuture;
-import com.google.api.core.SettableApiFuture;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.AsyncResultSet;
 import com.google.cloud.spanner.AsyncResultSet.CallbackResponse;
@@ -26,8 +26,11 @@ import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.Statement;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -40,8 +43,8 @@ import org.threeten.bp.Duration;
  * Implementation of the {@link SpannerTableChangeWatcher} interface that continuously polls a table
  * for changes based on a commit timestamp column in the table.
  */
-public class SpannerTableTailer implements SpannerTableChangeWatcher {
-  private static final Logger logger = Logger.getLogger(SpannerTableTailer.class.getName());
+public class SpannerTableTailer extends AbstractApiService implements SpannerTableChangeWatcher {
+  static final Logger logger = Logger.getLogger(SpannerTableTailer.class.getName());
   static final String PK_QUERY =
       "SELECT *\n"
           + "FROM INFORMATION_SCHEMA.INDEX_COLUMNS\n"
@@ -99,12 +102,11 @@ public class SpannerTableTailer implements SpannerTableChangeWatcher {
   // TODO: Check and warn if the commit timestamp column is not part of an index.
 
   private final Object lock = new Object();
-  private boolean started = false;
-  private SettableApiFuture<Void> stopFuture;
   private ScheduledFuture<?> scheduled;
   private ApiFuture<Void> currentPollFuture;
   private final DatabaseClient client;
   private final TableId table;
+  private final List<RowChangeCallback> callbacks = new LinkedList<>();
   private final CommitTimestampRepository commitTimestampRepository;
   private final Duration pollInterval;
   private final ScheduledExecutorService executor;
@@ -112,7 +114,6 @@ public class SpannerTableTailer implements SpannerTableChangeWatcher {
   private Timestamp startedPollWithCommitTimestamp;
   private Timestamp lastSeenCommitTimestamp;
 
-  private RowChangeCallback callback;
   private String commitTimestampColumn;
   private Statement.Builder pollStatementBuilder;
 
@@ -134,49 +135,68 @@ public class SpannerTableTailer implements SpannerTableChangeWatcher {
   }
 
   @Override
+  public void addCallback(RowChangeCallback callback) {
+    Preconditions.checkState(state() == State.NEW);
+    callbacks.add(callback);
+  }
+
+  @Override
   public TableId getTable() {
     return table;
   }
 
   @Override
-  public void start(RowChangeCallback callback) {
-    Preconditions.checkState(!started, "This SpannerTailer has already been started");
-    this.started = true;
+  protected void doStart() {
     this.lastSeenCommitTimestamp = commitTimestampRepository.get(table);
-    this.callback = callback;
-    commitTimestampColumn = SpannerUtils.getTimestampColumn(client, table);
-    pollStatementBuilder =
-        Statement.newBuilder(
-            String.format(
-                POLL_QUERY,
-                table.getSqlIdentifier(),
-                commitTimestampColumn,
-                commitTimestampColumn));
-    scheduled = executor.schedule(new SpannerTailerRunner(), 0L, TimeUnit.MILLISECONDS);
+    ApiFuture<String> commitTimestampColFut = SpannerUtils.getTimestampColumn(client, table);
+    commitTimestampColFut.addListener(
+        new Runnable() {
+          @Override
+          public void run() {
+            try {
+              commitTimestampColumn = Futures.getUnchecked(commitTimestampColFut);
+              pollStatementBuilder =
+                  Statement.newBuilder(
+                      String.format(
+                          POLL_QUERY,
+                          table.getSqlIdentifier(),
+                          commitTimestampColumn,
+                          commitTimestampColumn));
+              notifyStarted();
+              scheduled = executor.schedule(new SpannerTailerRunner(), 0L, TimeUnit.MILLISECONDS);
+            } catch (Throwable t) {
+              notifyFailed(t);
+            }
+          }
+        },
+        executor);
   }
 
   @Override
-  public ApiFuture<Void> stopAsync() {
+  protected void notifyFailed(Throwable cause) {
     synchronized (lock) {
-      Preconditions.checkState(started, "This SpannerTailer has not been started");
-      Preconditions.checkState(stopFuture == null, "This SpannerTailer has already been stopped");
-      stopFuture = SettableApiFuture.create();
+      if (isOwnedExecutor) {
+        executor.shutdown();
+      }
+    }
+    super.notifyFailed(cause);
+  }
+
+  @Override
+  protected void doStop() {
+    synchronized (lock) {
       if (scheduled.cancel(false)) {
         if (isOwnedExecutor) {
           executor.shutdown();
         }
-        stopFuture.set(null);
+        // The tailer has stopped if canceling was successful. Otherwise, notifyStopped() will be
+        // called by the runner.
+        notifyStopped();
       }
-      return stopFuture;
     }
   }
 
   class SpannerTailerCallback implements ReadyCallback {
-    private final RowChangeCallback delegate;
-
-    private SpannerTailerCallback(RowChangeCallback delegate) {
-      this.delegate = delegate;
-    }
 
     private void scheduleNextPollOrStop() {
       // Store the last seen commit timestamp in the repository to ensure that the poller will pick
@@ -185,7 +205,7 @@ public class SpannerTableTailer implements SpannerTableChangeWatcher {
         commitTimestampRepository.set(table, lastSeenCommitTimestamp);
       }
       synchronized (lock) {
-        if (stopFuture == null) {
+        if (state() == State.RUNNING) {
           // Schedule a new poll once this poll has finished completely.
           currentPollFuture.addListener(
               new Runnable() {
@@ -203,15 +223,16 @@ public class SpannerTableTailer implements SpannerTableChangeWatcher {
           if (isOwnedExecutor) {
             executor.shutdown();
           }
-          // Resolve the stopFuture when the async result set has released all its resources.
-          currentPollFuture.addListener(
-              new Runnable() {
-                @Override
-                public void run() {
-                  stopFuture.set(null);
-                }
-              },
-              MoreExecutors.directExecutor());
+          if (state() == State.STOPPING) {
+            currentPollFuture.addListener(
+                new Runnable() {
+                  @Override
+                  public void run() {
+                    notifyStopped();
+                  }
+                },
+                MoreExecutors.directExecutor());
+          }
         }
       }
     }
@@ -221,7 +242,7 @@ public class SpannerTableTailer implements SpannerTableChangeWatcher {
       try {
         while (true) {
           synchronized (lock) {
-            if (stopFuture != null) {
+            if (state() != State.RUNNING) {
               scheduleNextPollOrStop();
               return CallbackResponse.DONE;
             }
@@ -234,7 +255,9 @@ public class SpannerTableTailer implements SpannerTableChangeWatcher {
               return CallbackResponse.CONTINUE;
             case OK:
               Timestamp ts = resultSet.getTimestamp(commitTimestampColumn);
-              delegate.rowChange(table, new RowImpl(resultSet), ts);
+              for (RowChangeCallback callback : callbacks) {
+                callback.rowChange(table, new RowImpl(resultSet), ts);
+              }
               if (ts.compareTo(lastSeenCommitTimestamp) > 0) {
                 lastSeenCommitTimestamp = ts;
               }
@@ -243,6 +266,7 @@ public class SpannerTableTailer implements SpannerTableChangeWatcher {
         }
       } catch (Throwable t) {
         logger.log(Level.WARNING, "Error processing change set", t);
+        notifyFailed(t);
         scheduleNextPollOrStop();
         return CallbackResponse.DONE;
       }
@@ -265,7 +289,7 @@ public class SpannerTableTailer implements SpannerTableChangeWatcher {
                       .bind("prevCommitTimestamp")
                       .to(lastSeenCommitTimestamp)
                       .build())) {
-        currentPollFuture = rs.setCallback(executor, new SpannerTailerCallback(callback));
+        currentPollFuture = rs.setCallback(executor, new SpannerTailerCallback());
       }
     }
   }

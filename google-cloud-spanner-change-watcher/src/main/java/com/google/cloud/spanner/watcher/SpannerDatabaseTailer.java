@@ -17,12 +17,12 @@
 package com.google.cloud.spanner.watcher;
 
 import com.google.api.client.util.Preconditions;
-import com.google.api.core.ApiFunction;
-import com.google.api.core.ApiFuture;
-import com.google.api.core.ApiFutures;
+import com.google.api.core.AbstractApiService;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.DatabaseId;
+import com.google.cloud.spanner.ErrorCode;
 import com.google.cloud.spanner.Spanner;
+import com.google.cloud.spanner.SpannerExceptionFactory;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.StructReader;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
@@ -32,15 +32,16 @@ import com.google.common.util.concurrent.MoreExecutors;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import org.threeten.bp.Duration;
 
 /** Change watcher using polling for one or more tables of a Spanner database. */
-public class SpannerDatabaseTailer implements SpannerDatabaseChangeWatcher {
+public class SpannerDatabaseTailer extends AbstractApiService
+    implements SpannerDatabaseChangeWatcher {
   /** Lists all tables with a commit timestamp column. */
   static final String LIST_TABLE_NAMES_STATEMENT =
       "SELECT TABLE_NAME\n"
@@ -147,19 +148,23 @@ public class SpannerDatabaseTailer implements SpannerDatabaseChangeWatcher {
     return new Builder(spanner, databaseId);
   }
 
-  private boolean started;
-  private boolean stopped;
+  private final Object lock = new Object();
+  private final Builder builder;
   private final Spanner spanner;
   private final DatabaseId databaseId;
   private final String catalog;
   private final String schema;
   private final boolean allTables;
-  private final ImmutableList<TableId> tables;
   private final ImmutableList<String> includedTables;
   private final ImmutableList<String> excludedTables;
-  private final Map<TableId, SpannerTableChangeWatcher> capturers;
+  private ScheduledExecutorService executor;
+  private boolean isOwnedExecutor;
+  private ImmutableList<TableId> tables;
+  private Map<TableId, SpannerTableChangeWatcher> watchers;
+  private final List<RowChangeCallback> callbacks = new LinkedList<>();
 
   private SpannerDatabaseTailer(Builder builder) {
+    this.builder = builder;
     this.spanner = builder.spanner;
     this.databaseId = builder.databaseId;
     this.catalog = builder.catalog;
@@ -167,26 +172,15 @@ public class SpannerDatabaseTailer implements SpannerDatabaseChangeWatcher {
     this.allTables = builder.allTables;
     this.includedTables = ImmutableList.copyOf(builder.includedTables);
     this.excludedTables = ImmutableList.copyOf(builder.excludedTables);
-    this.tables = allTableNames(spanner.getDatabaseClient(databaseId));
-    ScheduledExecutorService executor;
     if (builder.executor == null) {
-      executor = MoreExecutors.listeningDecorator(Executors.newScheduledThreadPool(tables.size()));
+      isOwnedExecutor = true;
+      executor = new ScheduledThreadPoolExecutor(1);
     } else {
       executor = builder.executor;
     }
-    capturers = new HashMap<>(tables.size());
-    for (TableId table : tables) {
-      capturers.put(
-          table,
-          SpannerTableTailer.newBuilder(spanner, table)
-              .setCommitTimestampRepository(builder.commitTimestampRepository)
-              .setPollInterval(builder.pollInterval)
-              .setExecutor(executor)
-              .build());
-    }
   }
 
-  private ImmutableList<TableId> allTableNames(DatabaseClient client) {
+  private ImmutableList<TableId> findTableNames(DatabaseClient client) {
     Statement statement =
         Statement.newBuilder(LIST_TABLE_NAMES_STATEMENT)
             .bind("excluded")
@@ -200,57 +194,154 @@ public class SpannerDatabaseTailer implements SpannerDatabaseChangeWatcher {
             .bind("catalog")
             .to(catalog)
             .build();
-    return client
-        .singleUse()
-        .executeQueryAsync(statement)
-        .toList(
-            new Function<StructReader, TableId>() {
-              @Override
-              public TableId apply(StructReader input) {
-                return TableId.newBuilder(databaseId, input.getString(0))
-                    .setCatalog(catalog)
-                    .setSchema(schema)
-                    .build();
-              }
-            });
-  }
-
-  @Override
-  public void start(RowChangeCallback callback) {
-    Preconditions.checkState(!started, "This DatabaseTailer has already been started");
-    started = true;
-    for (SpannerTableChangeWatcher c : capturers.values()) {
-      c.start(callback);
+    ImmutableList<TableId> tables =
+        client
+            .singleUse()
+            .executeQueryAsync(statement)
+            .toList(
+                new Function<StructReader, TableId>() {
+                  @Override
+                  public TableId apply(StructReader input) {
+                    return TableId.newBuilder(databaseId, input.getString(0))
+                        .setCatalog(catalog)
+                        .setSchema(schema)
+                        .build();
+                  }
+                });
+    // Check that all tables that were explicitly included were returned by allTableNames
+    // and are valid to use with this tailer, i.e. they have a column containing a commit
+    // timestamp.
+    for (String includedTable : builder.includedTables) {
+      if (!tables.contains(
+          TableId.newBuilder(databaseId, includedTable)
+              .setCatalog(catalog)
+              .setSchema(schema)
+              .build())) {
+        throw SpannerExceptionFactory.newSpannerException(
+            ErrorCode.NOT_FOUND,
+            String.format(
+                "Table `%s` was explicitly included for this SpannerDatabaseTailer, but either the table was not found or it does not contain a column with the option allow_commit_timestamp=true.",
+                includedTable));
+      }
     }
-  }
-
-  @Override
-  public ApiFuture<Void> stopAsync() {
-    Preconditions.checkState(started, "This DatabaseTailer has not been started");
-    Preconditions.checkState(!stopped, "This DatabaseTailer has already been stopped");
-    stopped = true;
-    List<ApiFuture<Void>> futures = new ArrayList<>(capturers.size());
-    for (SpannerTableChangeWatcher c : capturers.values()) {
-      futures.add(c.stopAsync());
-    }
-    return ApiFutures.transform(
-        ApiFutures.allAsList(futures),
-        new ApiFunction<List<Void>, Void>() {
-          @Override
-          public Void apply(List<Void> input) {
-            return null;
-          }
-        },
-        MoreExecutors.directExecutor());
-  }
-
-  @Override
-  public ImmutableList<TableId> getTables() {
     return tables;
   }
 
   @Override
-  public SpannerTableChangeWatcher getCapturer(TableId table) {
-    return capturers.get(table);
+  public void addCallback(RowChangeCallback callback) {
+    Preconditions.checkState(state() == State.NEW);
+    callbacks.add(callback);
+  }
+
+  @Override
+  protected void doStart() {
+    executor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            try {
+              ImmutableList<TableId> tables = getTables();
+              if (isOwnedExecutor && !tables.isEmpty()) {
+                ((ScheduledThreadPoolExecutor) executor).setCorePoolSize(tables.size());
+              }
+              synchronized (lock) {
+                if (watchers == null) {
+                  initWatchersLocked();
+                }
+                for (SpannerTableChangeWatcher watcher : watchers.values()) {
+                  watcher.startAsync();
+                }
+              }
+            } catch (Throwable t) {
+              notifyFailed(t);
+            }
+          }
+        });
+  }
+
+  @Override
+  protected void doStop() {
+    synchronized (lock) {
+      for (SpannerTableChangeWatcher c : watchers.values()) {
+        c.stopAsync();
+      }
+    }
+  }
+
+  @Override
+  public ImmutableList<TableId> getTables() {
+    synchronized (lock) {
+      if (tables == null) {
+        tables = findTableNames(spanner.getDatabaseClient(databaseId));
+      }
+      return tables;
+    }
+  }
+
+  private void initWatchersLocked() {
+    watchers = new HashMap<>(tables.size());
+    for (TableId table : tables) {
+      SpannerTableTailer watcher =
+          SpannerTableTailer.newBuilder(spanner, table)
+              .setCommitTimestampRepository(builder.commitTimestampRepository)
+              .setPollInterval(builder.pollInterval)
+              .setExecutor(executor)
+              .build();
+      for (RowChangeCallback callback : callbacks) {
+        watcher.addCallback(callback);
+      }
+      watcher.addListener(
+          new Listener() {
+            @Override
+            public void failed(State from, Throwable failure) {
+              synchronized (lock) {
+                // Try to stop all watchers that are still running.
+                for (SpannerTableChangeWatcher c : watchers.values()) {
+                  if (c.state() != State.FAILED) {
+                    c.stopAsync();
+                  }
+                }
+                for (SpannerTableChangeWatcher c : watchers.values()) {
+                  if (c.state() == State.STOPPING) {
+                    c.awaitTerminated();
+                  }
+                }
+              }
+              notifyFailed(failure);
+            }
+
+            @Override
+            public void running() {
+              synchronized (lock) {
+                if (state() == State.RUNNING) {
+                  return;
+                }
+                for (SpannerTableChangeWatcher c : watchers.values()) {
+                  if (c.state() != State.RUNNING) {
+                    return;
+                  }
+                }
+              }
+              notifyStarted();
+            }
+
+            @Override
+            public void terminated(State from) {
+              synchronized (lock) {
+                if (state() == State.TERMINATED) {
+                  return;
+                }
+                for (SpannerTableChangeWatcher c : watchers.values()) {
+                  if (c.state() != State.TERMINATED) {
+                    return;
+                  }
+                }
+              }
+              notifyStopped();
+            }
+          },
+          MoreExecutors.directExecutor());
+      watchers.put(table, watcher);
+    }
   }
 }

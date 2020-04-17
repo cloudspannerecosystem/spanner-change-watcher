@@ -16,18 +16,31 @@
 
 package com.google.cloud.spanner.publisher;
 
+import com.google.api.core.AbstractApiService;
+import com.google.api.core.ApiService;
+import com.google.api.gax.core.FixedCredentialsProvider;
+import com.google.api.gax.core.NoCredentialsProvider;
+import com.google.api.gax.grpc.GrpcTransportChannel;
+import com.google.api.gax.rpc.FixedTransportChannelProvider;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.pubsub.v1.Publisher;
 import com.google.cloud.pubsub.v1.stub.PublisherStubSettings;
 import com.google.cloud.spanner.DatabaseClient;
+import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.NoOpListener;
+import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishRowChangeCallback;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Stopwatch;
+import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,20 +51,21 @@ import java.util.logging.Logger;
  * <p>The changes to the tables are emitted from a {@link SpannerDatabaseChangeWatcher} and then
  * sent to Pub/Sub by this event publisher.
  */
-public class SpannerDatabaseChangeEventPublisher {
+public class SpannerDatabaseChangeEventPublisher extends AbstractApiService implements ApiService {
   private static final Logger logger =
       Logger.getLogger(SpannerDatabaseChangeEventPublisher.class.getName());
 
   public static class Builder {
-    private final SpannerDatabaseChangeWatcher capturer;
+    private final SpannerDatabaseChangeWatcher watcher;
     private final DatabaseClient client;
     private String topicNameFormat;
+    private ExecutorService startStopExecutor;
     private Credentials credentials;
     private String endpoint = PublisherStubSettings.getDefaultEndpoint();
     private boolean usePlainText;
 
-    private Builder(SpannerDatabaseChangeWatcher capturer, DatabaseClient client) {
-      this.capturer = capturer;
+    private Builder(SpannerDatabaseChangeWatcher watcher, DatabaseClient client) {
+      this.watcher = watcher;
       this.client = client;
     }
 
@@ -62,6 +76,11 @@ public class SpannerDatabaseChangeEventPublisher {
      */
     public Builder setTopicNameFormat(String topicNameFormat) {
       this.topicNameFormat = Preconditions.checkNotNull(topicNameFormat);
+      return this;
+    }
+
+    public Builder setStartStopExecutor(ExecutorService executor) {
+      this.startStopExecutor = executor;
       return this;
     }
 
@@ -91,71 +110,139 @@ public class SpannerDatabaseChangeEventPublisher {
     }
   }
 
-  public static Builder newBuilder(SpannerDatabaseChangeWatcher capturer, DatabaseClient client) {
-    return new Builder(capturer, client);
+  public static Builder newBuilder(SpannerDatabaseChangeWatcher watcher, DatabaseClient client) {
+    Preconditions.checkNotNull(watcher);
+    Preconditions.checkNotNull(client);
+    Preconditions.checkArgument(watcher.state() == State.NEW);
+    return new Builder(watcher, client);
   }
 
-  private boolean started;
-  private boolean stopped;
-  private final SpannerDatabaseChangeWatcher capturer;
-  private final List<SpannerTableChangeEventPublisher> publishers;
+  private final Builder builder;
+  private final DatabaseClient client;
+  private final SpannerDatabaseChangeWatcher watcher;
+  private final ExecutorService startStopExecutor;
+  private final boolean isOwnedExecutor;
+  private Map<TableId, Publisher> publishers;
+  private Map<TableId, SpannerToAvro> converters;
 
   private SpannerDatabaseChangeEventPublisher(Builder builder) throws IOException {
-    this.capturer = builder.capturer;
-    this.publishers = new ArrayList<>(capturer.getTables().size());
-    for (TableId table : capturer.getTables()) {
-      SpannerTableChangeEventPublisher.Builder publisherBuilder =
-          SpannerTableChangeEventPublisher.newBuilder(capturer.getCapturer(table), builder.client)
-              .setTopicName(
-                  builder
-                      .topicNameFormat
-                      .replace("%project%", table.getDatabaseId().getInstanceId().getProject())
-                      .replace("%instance%", table.getDatabaseId().getInstanceId().getInstance())
-                      .replace("%database%", table.getDatabaseId().getDatabase())
-                      .replace("%catalog%", table.getCatalog())
-                      .replace("%schema%", table.getSchema())
-                      .replace("%table%", table.getTable()))
-              .setEndpoint(builder.endpoint);
-      if (builder.credentials != null) {
-        publisherBuilder.setCredentials(builder.credentials);
-      }
-      if (builder.usePlainText) {
-        publisherBuilder.usePlainText();
-      }
-      publishers.add(publisherBuilder.build());
-    }
+    this.builder = builder;
+    this.client = builder.client;
+    this.watcher = builder.watcher;
+    this.startStopExecutor =
+        builder.startStopExecutor == null
+            ? Executors.newCachedThreadPool()
+            : builder.startStopExecutor;
+    this.isOwnedExecutor = builder.startStopExecutor == null;
   }
 
-  public void start() {
-    Preconditions.checkArgument(!started, "This event publisher has already been started");
+  @Override
+  protected void doStart() {
     logger.log(Level.FINE, "Starting event publisher");
-    started = true;
-    for (SpannerTableChangeEventPublisher publisher : publishers) {
-      publisher.start();
-    }
+    startStopExecutor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            try {
+              publishers = new HashMap<>(watcher.getTables().size());
+              converters = new HashMap<>(watcher.getTables().size());
+              for (TableId table : watcher.getTables()) {
+                // TODO: Re-use code from SpannerTableChangeEventPublisher.
+                converters.put(table, new SpannerToAvro(client, table));
+                Credentials credentials =
+                    builder.credentials == null
+                        ? GoogleCredentials.getApplicationDefault()
+                        : builder.credentials;
+                if (credentials == null) {
+                  throw new IllegalArgumentException(
+                      "There is no credentials set on the builder, and the environment has no default credentials set.");
+                }
+                Publisher.Builder publisherBuilder =
+                    Publisher.newBuilder(
+                            builder
+                                .topicNameFormat
+                                .replace(
+                                    "%project%", table.getDatabaseId().getInstanceId().getProject())
+                                .replace(
+                                    "%instance%",
+                                    table.getDatabaseId().getInstanceId().getInstance())
+                                .replace("%database%", table.getDatabaseId().getDatabase())
+                                .replace("%catalog%", table.getCatalog())
+                                .replace("%schema%", table.getSchema())
+                                .replace("%table%", table.getTable()))
+                        .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
+                        .setEndpoint(builder.endpoint);
+                if (builder.usePlainText) {
+                  ManagedChannel channel =
+                      ManagedChannelBuilder.forTarget(builder.endpoint).usePlaintext().build();
+                  publisherBuilder.setChannelProvider(
+                      FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel)));
+                  publisherBuilder.setCredentialsProvider(NoCredentialsProvider.create());
+                }
+                publishers.put(table, publisherBuilder.build());
+              }
+              watcher.addCallback(
+                  new PublishRowChangeCallback(new NoOpListener()) {
+                    @Override
+                    Publisher getPublisher(TableId table) {
+                      return publishers.get(table);
+                    }
+
+                    @Override
+                    SpannerToAvro getConverter(TableId table) {
+                      return converters.get(table);
+                    }
+                  });
+              watcher.addListener(
+                  new Listener() {
+                    @Override
+                    public void failed(State from, Throwable failure) {
+                      notifyFailed(failure);
+                    }
+
+                    @Override
+                    public void running() {
+                      notifyStarted();
+                    }
+                  },
+                  MoreExecutors.directExecutor());
+              watcher.startAsync();
+            } catch (Throwable t) {
+              notifyFailed(t);
+            }
+          }
+        });
   }
 
-  public void stop() {
-    Preconditions.checkArgument(started, "This event publisher has not been started");
-    Preconditions.checkArgument(!stopped, "This event publisher has already been stopped");
+  @Override
+  protected void doStop() {
     logger.log(Level.FINE, "Stopping event publisher");
-    stopped = true;
-    for (SpannerTableChangeEventPublisher publisher : publishers) {
-      publisher.stop();
-    }
-  }
-
-  public boolean awaitTermination(long duration, TimeUnit unit) throws InterruptedException {
-    Preconditions.checkArgument(stopped, "This event publisher has not been stopped");
-    Stopwatch watch = Stopwatch.createStarted();
-    boolean res = true;
-    for (SpannerTableChangeEventPublisher publisher : publishers) {
-      long remainingDuration = duration - watch.elapsed(unit) + 1L;
-      if (remainingDuration <= 0) {
-        return false;
-      }
-      res = res && publisher.awaitTermination(duration, unit);
-    }
-    return res;
+    watcher.addListener(
+        new Listener() {
+          @Override
+          public void terminated(State from) {
+            try {
+              for (Publisher publisher : publishers.values()) {
+                publisher.shutdown();
+              }
+              for (Publisher publisher : publishers.values()) {
+                try {
+                  publisher.awaitTermination(Long.MAX_VALUE, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                }
+              }
+              notifyStopped();
+            } catch (Throwable t) {
+              notifyFailed(t);
+            } finally {
+              if (isOwnedExecutor) {
+                startStopExecutor.shutdown();
+              }
+            }
+          }
+        },
+        startStopExecutor);
+    watcher.stopAsync();
   }
 }

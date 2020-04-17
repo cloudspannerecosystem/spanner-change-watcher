@@ -16,15 +16,15 @@
 
 package com.google.cloud.spanner.publisher;
 
+import com.google.api.core.AbstractApiService;
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutureCallback;
 import com.google.api.core.ApiFutures;
-import com.google.api.gax.core.CredentialsProvider;
+import com.google.api.core.ApiService;
 import com.google.api.gax.core.FixedCredentialsProvider;
 import com.google.api.gax.core.NoCredentialsProvider;
 import com.google.api.gax.grpc.GrpcTransportChannel;
 import com.google.api.gax.rpc.FixedTransportChannelProvider;
-import com.google.api.gax.rpc.TransportChannelProvider;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.Timestamp;
@@ -37,15 +37,13 @@ import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallb
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.pubsub.v1.PubsubMessage;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -55,7 +53,7 @@ import java.util.logging.Logger;
  * <p>The changes to the table are emitted from a {@link SpannerTableChangeWatcher} and then sent to
  * Pub/Sub by this event publisher.
  */
-public class SpannerTableChangeEventPublisher {
+public class SpannerTableChangeEventPublisher extends AbstractApiService implements ApiService {
   private static final Logger logger =
       Logger.getLogger(SpannerTableChangeEventPublisher.class.getName());
 
@@ -65,23 +63,24 @@ public class SpannerTableChangeEventPublisher {
     void onPublished(TableId table, Timestamp commitTimestamp, String messageId);
   }
 
-  private static final class NoOpListener implements PublishListener {
+  static final class NoOpListener implements PublishListener {
     @Override
     public void onPublished(TableId table, Timestamp commitTimestamp, String messageId) {}
   }
 
   public static class Builder {
-    private final SpannerTableChangeWatcher capturer;
+    private final SpannerTableChangeWatcher watcher;
     private final DatabaseClient client;
     private Publisher publisher;
-    private PublishListener listener = new NoOpListener();
     private String topicName;
+    private ExecutorService startStopExecutor;
+    private PublishListener listener = new NoOpListener();
     private Credentials credentials;
     private String endpoint = PublisherStubSettings.getDefaultEndpoint();
     private boolean usePlainText;
 
-    private Builder(SpannerTableChangeWatcher capturer, DatabaseClient client) {
-      this.capturer = capturer;
+    private Builder(SpannerTableChangeWatcher watcher, DatabaseClient client) {
+      this.watcher = watcher;
       this.client = client;
     }
 
@@ -96,6 +95,11 @@ public class SpannerTableChangeEventPublisher {
           publisher == null,
           "Set either the Publisher or the TopicName and Credentials, but not both.");
       this.topicName = Preconditions.checkNotNull(topicName);
+      return this;
+    }
+
+    public Builder setStartStopExecutor(ExecutorService executor) {
+      this.startStopExecutor = executor;
       return this;
     }
 
@@ -145,115 +149,163 @@ public class SpannerTableChangeEventPublisher {
    * Creates a new {@link Builder} for a {@link SpannerTableChangeEventPublisher} with the given
    * {@link SpannerTableChangeWatcher} as its source.
    */
-  public static Builder newBuilder(SpannerTableChangeWatcher capturer, DatabaseClient client) {
-    return new Builder(capturer, client);
+  public static Builder newBuilder(SpannerTableChangeWatcher watcher, DatabaseClient client) {
+    Preconditions.checkNotNull(watcher);
+    Preconditions.checkNotNull(client);
+    Preconditions.checkArgument(watcher.state() == State.NEW);
+    return new Builder(watcher, client);
   }
 
-  private boolean started = false;
-  private boolean stopped = false;
-  private ApiFuture<Void> capturerStopFuture;
-  private final Publisher publisher;
+  abstract static class PublishRowChangeCallback implements RowChangeCallback {
+    private final PublishListener listener;
+
+    PublishRowChangeCallback(PublishListener listener) {
+      this.listener = listener;
+    }
+
+    abstract SpannerToAvro getConverter(TableId table);
+
+    abstract Publisher getPublisher(TableId table);
+
+    @Override
+    public void rowChange(final TableId table, Row row, final Timestamp commitTimestamp) {
+      // Only use resources to convert the row to a string if we are actually going to log it.
+      final String rowString = logger.isLoggable(Level.FINE) ? row.asStruct().toString() : null;
+      logger.log(Level.FINE, "Publishing change to row {0}", rowString);
+      ApiFuture<String> result =
+          getPublisher(table)
+              .publish(
+                  PubsubMessage.newBuilder()
+                      .setData(getConverter(table).makeRecord(row))
+                      .putAttributes("Database", table.getDatabaseId().getName())
+                      .putAttributes("Catalog", table.getCatalog())
+                      .putAttributes("Schema", table.getSchema())
+                      .putAttributes("Table", table.getTable())
+                      .putAttributes("Timestamp", commitTimestamp.toString())
+                      .build());
+      ApiFutures.addCallback(
+          result,
+          new ApiFutureCallback<String>() {
+            @Override
+            public void onSuccess(String messageId) {
+              logger.log(Level.FINE, "Successfully published change to row {0}", rowString);
+              listener.onPublished(table, commitTimestamp, messageId);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              logger.log(Level.WARNING, "Failed to publish change", t);
+              logger.log(
+                  Level.FINE, String.format("Failed to publish change to row {0}", rowString));
+            }
+          },
+          MoreExecutors.directExecutor());
+    }
+  }
+
+  private final Builder builder;
+  private final DatabaseClient client;
+  private Publisher publisher;
   private final PublishListener listener;
-  private final SpannerTableChangeWatcher capturer;
-  private final SpannerToAvro converter;
+  private final ExecutorService startStopExecutor;
+  private final boolean isOwnedExecutor;
+  private final SpannerTableChangeWatcher watcher;
 
   private SpannerTableChangeEventPublisher(Builder builder) throws IOException {
+    this.builder = builder;
+    this.client = builder.client;
+    this.startStopExecutor =
+        builder.startStopExecutor == null
+            ? Executors.newCachedThreadPool()
+            : builder.startStopExecutor;
+    this.isOwnedExecutor = builder.startStopExecutor == null;
     if (builder.publisher != null) {
       this.publisher = builder.publisher;
-    } else {
-      Credentials credentials =
-          builder.credentials == null
-              ? GoogleCredentials.getApplicationDefault()
-              : builder.credentials;
-      if (credentials == null) {
-        throw new IllegalArgumentException(
-            "There is no credentials set on the builder, and the environment has no default credentials set.");
-      }
-      Publisher.Builder publisherBuilder =
-          Publisher.newBuilder(builder.topicName)
-              .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
-              .setEndpoint(builder.endpoint);
-      if (builder.usePlainText) {
-        ManagedChannel channel =
-            ManagedChannelBuilder.forTarget(builder.endpoint).usePlaintext().build();
-        TransportChannelProvider channelProvider =
-            FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel));
-        CredentialsProvider credentialsProvider = NoCredentialsProvider.create();
-        publisherBuilder.setChannelProvider(channelProvider);
-        publisherBuilder.setCredentialsProvider(credentialsProvider);
-      }
-      this.publisher = publisherBuilder.build();
     }
     this.listener = builder.listener;
-    this.capturer = builder.capturer;
-    this.converter = new SpannerToAvro(builder.client, capturer.getTable());
+    this.watcher = builder.watcher;
   }
 
-  /** Starts this event publisher and starts publishing changes to Pub/Sub. */
-  public void start() {
-    Preconditions.checkState(!started, "This event publisher has already been started.");
-    started = true;
-    capturer.start(
-        new RowChangeCallback() {
+  @Override
+  protected void doStart() {
+    startStopExecutor.execute(
+        new Runnable() {
           @Override
-          public void rowChange(final TableId table, Row row, final Timestamp commitTimestamp) {
-            // Only use resources to convert the row to a string if we are actually going to log it.
-            final String rowString =
-                logger.isLoggable(Level.FINE) ? row.asStruct().toString() : null;
-            logger.log(Level.FINE, "Publishing change to row {0}", rowString);
-            ApiFuture<String> result =
-                publisher.publish(
-                    PubsubMessage.newBuilder()
-                        .setData(converter.makeRecord(row))
-                        .putAttributes("Database", table.getDatabaseId().getName())
-                        .putAttributes("Catalog", table.getCatalog())
-                        .putAttributes("Schema", table.getSchema())
-                        .putAttributes("Table", table.getTable())
-                        .putAttributes("Timestamp", commitTimestamp.toString())
-                        .build());
-            ApiFutures.addCallback(
-                result,
-                new ApiFutureCallback<String>() {
-                  @Override
-                  public void onSuccess(String messageId) {
-                    logger.log(Level.FINE, "Successfully published change to row {0}", rowString);
-                    listener.onPublished(table, commitTimestamp, messageId);
-                  }
+          public void run() {
+            try {
+              SpannerToAvro converter = new SpannerToAvro(client, watcher.getTable());
+              if (publisher == null) {
+                Credentials credentials =
+                    builder.credentials == null
+                        ? GoogleCredentials.getApplicationDefault()
+                        : builder.credentials;
+                if (credentials == null) {
+                  throw new IllegalArgumentException(
+                      "There is no credentials set on the builder, and the environment has no default credentials set.");
+                }
+                Publisher.Builder publisherBuilder =
+                    Publisher.newBuilder(builder.topicName)
+                        .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
+                        .setEndpoint(builder.endpoint);
+                if (builder.usePlainText) {
+                  ManagedChannel channel =
+                      ManagedChannelBuilder.forTarget(builder.endpoint).usePlaintext().build();
+                  publisherBuilder.setChannelProvider(
+                      FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel)));
+                  publisherBuilder.setCredentialsProvider(NoCredentialsProvider.create());
+                }
+                publisher = publisherBuilder.build();
+              }
+              watcher.addListener(
+                  new Listener() {
+                    @Override
+                    public void running() {
+                      notifyStarted();
+                    }
 
-                  @Override
-                  public void onFailure(Throwable t) {
-                    logger.log(Level.WARNING, "Failed to publish change", t);
-                    logger.log(
-                        Level.FINE,
-                        String.format("Failed to publish change to row {0}", rowString));
-                  }
-                },
-                MoreExecutors.directExecutor());
+                    @Override
+                    public void failed(State from, Throwable failure) {
+                      notifyFailed(failure);
+                    }
+                  },
+                  MoreExecutors.directExecutor());
+              watcher.addCallback(
+                  new PublishRowChangeCallback(listener) {
+                    @Override
+                    Publisher getPublisher(TableId table) {
+                      return publisher;
+                    }
+
+                    @Override
+                    SpannerToAvro getConverter(TableId table) {
+                      return converter;
+                    }
+                  });
+              watcher.startAsync();
+            } catch (Throwable t) {
+              notifyFailed(t);
+            }
           }
         });
   }
 
-  /**
-   * Stops this event publisher. No more changes will be published to Pub/Sub when this method has
-   * returned.
-   */
-  public void stop() {
-    Preconditions.checkState(started, "This event publisher has not been started");
-    Preconditions.checkState(!stopped, "This event publisher has already been stopped");
-    stopped = true;
-    capturerStopFuture = capturer.stopAsync();
-    publisher.shutdown();
-  }
-
-  public boolean awaitTermination(long duration, TimeUnit unit) throws InterruptedException {
-    Preconditions.checkState(stopped, "This event publisher has not been stopped");
-    Stopwatch watch = Stopwatch.createStarted();
-    try {
-      capturerStopFuture.get(duration, unit);
-    } catch (ExecutionException | TimeoutException e) {
-      return false;
+  @Override
+  public void doStop() {
+    startStopExecutor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            try {
+              watcher.stopAsync().awaitTerminated();
+              publisher.shutdown();
+              notifyStopped();
+            } catch (Throwable t) {
+              notifyFailed(t);
+            }
+          }
+        });
+    if (isOwnedExecutor) {
+      startStopExecutor.shutdown();
     }
-    long remaining = duration - watch.elapsed(unit) + 1L;
-    return publisher.awaitTermination(remaining, unit);
   }
 }

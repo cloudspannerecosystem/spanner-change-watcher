@@ -85,7 +85,7 @@ public class ITSpannerDatabaseTailerTest {
                     .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
                     .build())
             .build();
-    tailer.start(
+    tailer.addCallback(
         new RowChangeCallback() {
           @Override
           public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
@@ -96,6 +96,7 @@ public class ITSpannerDatabaseTailerTest {
             latch.countDown();
           }
         });
+    tailer.startAsync().awaitRunning();
 
     DatabaseClient client = spanner.getDatabaseClient(database.getId());
     latch = new CountDownLatch(3);
@@ -247,7 +248,7 @@ public class ITSpannerDatabaseTailerTest {
                 Mutation.delete("NUMBERS2", Key.of(2L)), Mutation.delete("NUMBERS1", Key.of(3L))));
     Thread.sleep(500L);
     assertThat(receivedChanges).isEmpty();
-    tailer.stopAsync().get();
+    tailer.stopAsync().awaitTerminated();
   }
 
   private ImmutableList<Struct> drainChanges() throws Exception {

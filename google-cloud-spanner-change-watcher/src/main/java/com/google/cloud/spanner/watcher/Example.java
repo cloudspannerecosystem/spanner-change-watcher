@@ -30,6 +30,7 @@ class Example {
   static void tableTailerExample() throws Exception {
     Spanner spanner = SpannerOptions.getDefaultInstance().getService();
     DatabaseId databaseId = DatabaseId.of("my-project", "my-instance", "my-database");
+    final CountDownLatch latch = new CountDownLatch(3);
     SpannerTableTailer tailer =
         SpannerTableTailer.newBuilder(spanner, TableId.of(databaseId, "MY_TABLE"))
             // Poll every 100 milliseconds (default is 1 second)
@@ -41,8 +42,7 @@ class Example {
                     .setCreateTableIfNotExists()
                     .build())
             .build();
-    final CountDownLatch latch = new CountDownLatch(3);
-    tailer.start(
+    tailer.addCallback(
         new RowChangeCallback() {
           @Override
           public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
@@ -50,10 +50,11 @@ class Example {
             latch.countDown();
           }
         });
+    tailer.startAsync();
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
-    tailer.stopAsync().get();
+    tailer.stopAsync().awaitTerminated();
   }
 
   static void databaseTailerExample() throws Exception {
@@ -67,7 +68,7 @@ class Example {
             .excludeTables("TABLE1", "TABLE2")
             .build();
     final CountDownLatch latch = new CountDownLatch(3);
-    tailer.start(
+    tailer.addCallback(
         new RowChangeCallback() {
           @Override
           public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
@@ -75,9 +76,10 @@ class Example {
             latch.countDown();
           }
         });
+    tailer.startAsync().awaitRunning();
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
-    tailer.stopAsync().get();
+    tailer.stopAsync().awaitTerminated();
   }
 }
