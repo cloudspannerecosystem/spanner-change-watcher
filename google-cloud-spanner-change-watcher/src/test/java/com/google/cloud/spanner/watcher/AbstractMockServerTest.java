@@ -37,7 +37,9 @@ import io.grpc.Server;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
 import java.util.Collections;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -250,7 +252,7 @@ public abstract class AbstractMockServerTest {
           .bind("catalog")
           .to("")
           .build();
-  private static final ResultSetMetadata FIND_ALL_TABLES_METADATA =
+  private static final ResultSetMetadata FIND_TABLES_METADATA =
       ResultSetMetadata.newBuilder()
           .setRowType(
               StructType.newBuilder()
@@ -271,7 +273,20 @@ public abstract class AbstractMockServerTest {
               ListValue.newBuilder()
                   .addValues(Value.newBuilder().setStringValue("Bar").build())
                   .build())
-          .setMetadata(FIND_ALL_TABLES_METADATA)
+          .setMetadata(FIND_TABLES_METADATA)
+          .build();
+  private static final Statement FIND_FOO_BAR_NON_EXISTING_TABLE_TABLES_STATEMENT =
+      Statement.newBuilder(SpannerDatabaseTailer.LIST_TABLE_NAMES_STATEMENT)
+          .bind("excluded")
+          .toStringArray(Collections.<String>emptyList())
+          .bind("allTables")
+          .to(false)
+          .bind("included")
+          .toStringArray(Arrays.asList("Foo", "Bar", "NonExistingTable"))
+          .bind("schema")
+          .to("")
+          .bind("catalog")
+          .to("")
           .build();
   private static final ResultSetMetadata COLUMNS_OPTIONS_METADATA =
       ResultSetMetadata.newBuilder()
@@ -311,7 +326,7 @@ public abstract class AbstractMockServerTest {
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
-  public static final int SELECT_BAR_ROW_COUNT = 20;
+  public static final int SELECT_FOO_ROW_COUNT = 10;
   private static final com.google.spanner.v1.ResultSet COLUMNS_OPTIONS_FOO_RESULT =
       com.google.spanner.v1.ResultSet.newBuilder()
           .addRows(
@@ -339,7 +354,7 @@ public abstract class AbstractMockServerTest {
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
-  public static final int SELECT_FOO_ROW_COUNT = 10;
+  public static final int SELECT_BAR_ROW_COUNT = 20;
   private static final com.google.spanner.v1.ResultSet COLUMNS_OPTIONS_BAR_RESULT =
       com.google.spanner.v1.ResultSet.newBuilder()
           .addRows(
@@ -351,10 +366,25 @@ public abstract class AbstractMockServerTest {
           .setMetadata(COLUMNS_OPTIONS_METADATA)
           .build();
 
+  // Poll NonExistentTable results.
+  private static final Statement COLUMN_OPTIONS_NON_EXISTING_TABLE_STATEMENT =
+      Statement.newBuilder(SpannerUtils.FIND_COMMIT_TIMESTAMP_COLUMN_QUERY)
+          .bind("catalog")
+          .to("")
+          .bind("schema")
+          .to("")
+          .bind("table")
+          .to("NonExistingTable")
+          .build();
+  private static final com.google.spanner.v1.ResultSet COLUMNS_OPTIONS_NON_EXISTING_TABLE_RESULT =
+      com.google.spanner.v1.ResultSet.newBuilder().setMetadata(COLUMNS_OPTIONS_METADATA).build();
+
   protected static MockSpannerServiceImpl mockSpanner;
   private static Server server;
   private static InetSocketAddress address;
-  public static Spanner spanner;
+  private Spanner spanner;
+  private Statement currentFooPollStatement;
+  private Statement currentBarPollStatement;
 
   @BeforeClass
   public static void startStaticServer() throws IOException {
@@ -362,7 +392,22 @@ public abstract class AbstractMockServerTest {
     mockSpanner.setAbortProbability(0.0D); // We don't want any unpredictable aborted transactions.
     address = new InetSocketAddress("localhost", 0);
     server = NettyServerBuilder.forAddress(address).addService(mockSpanner).build().start();
+  }
 
+  @AfterClass
+  public static void stopServer() throws Exception {
+    server.shutdown();
+    server.awaitTermination();
+  }
+
+  @After
+  public void reset() {
+    spanner.close();
+    mockSpanner.reset();
+  }
+
+  @Before
+  public void setupResults() {
     // SpannerCommitTimestampRepository results.
     mockSpanner.putStatementResult(
         StatementResult.query(
@@ -383,13 +428,16 @@ public abstract class AbstractMockServerTest {
     // SpannerDatabaseTailer results.
     mockSpanner.putStatementResult(
         StatementResult.query(FIND_ALL_TABLES_STATEMENT, FIND_ALL_TABLES_RESULT));
+    mockSpanner.putStatementResult(
+        StatementResult.query(
+            FIND_FOO_BAR_NON_EXISTING_TABLE_TABLES_STATEMENT, FIND_ALL_TABLES_RESULT));
 
     // Poll Foo results.
     mockSpanner.putStatementResult(
         StatementResult.query(COLUMN_OPTIONS_FOO_STATEMENT, COLUMNS_OPTIONS_FOO_RESULT));
     ResultSet fooResults = new RandomResultSetGenerator(SELECT_FOO_ROW_COUNT).generate();
     Timestamp maxFooCommitTimestamp = RandomResultSetGenerator.getMaxCommitTimestamp(fooResults);
-    Statement nextFooPollStatement =
+    currentFooPollStatement =
         SELECT_FOO_STATEMENT
             .toBuilder()
             .bind("prevCommitTimestamp")
@@ -397,29 +445,28 @@ public abstract class AbstractMockServerTest {
             .build();
     mockSpanner.putStatementResults(
         StatementResult.query(SELECT_FOO_STATEMENT, fooResults),
-        StatementResult.query(nextFooPollStatement, new RandomResultSetGenerator(0).generate()));
+        StatementResult.query(currentFooPollStatement, new RandomResultSetGenerator(0).generate()));
     // Poll Bar results.
     mockSpanner.putStatementResult(
         StatementResult.query(COLUMN_OPTIONS_BAR_STATEMENT, COLUMNS_OPTIONS_BAR_RESULT));
+    ResultSet barResults = new RandomResultSetGenerator(SELECT_BAR_ROW_COUNT).generate();
+    Timestamp maxBarCommitTimestamp = RandomResultSetGenerator.getMaxCommitTimestamp(barResults);
+    currentBarPollStatement =
+        SELECT_BAR_STATEMENT
+            .toBuilder()
+            .bind("prevCommitTimestamp")
+            .to(maxBarCommitTimestamp)
+            .build();
+    mockSpanner.putStatementResults(
+        StatementResult.query(SELECT_BAR_STATEMENT, barResults),
+        StatementResult.query(currentBarPollStatement, new RandomResultSetGenerator(0).generate()));
+    // Poll NonExistentTable results.
     mockSpanner.putStatementResult(
-        StatementResult.queryAndThen(
-            SELECT_BAR_STATEMENT,
-            new RandomResultSetGenerator(SELECT_BAR_ROW_COUNT).generate(),
-            new RandomResultSetGenerator(0).generate()));
+        StatementResult.query(
+            COLUMN_OPTIONS_NON_EXISTING_TABLE_STATEMENT,
+            COLUMNS_OPTIONS_NON_EXISTING_TABLE_RESULT));
 
     spanner = createSpanner();
-  }
-
-  @AfterClass
-  public static void stopServer() throws Exception {
-    spanner.close();
-    server.shutdown();
-    server.awaitTermination();
-  }
-
-  @Before
-  public void setupResults() {
-    mockSpanner.reset();
   }
 
   @SuppressWarnings("rawtypes")
@@ -437,5 +484,17 @@ public abstract class AbstractMockServerTest {
             })
         .build()
         .getService();
+  }
+
+  protected Spanner getSpanner() {
+    return spanner;
+  }
+
+  protected Statement getCurrentFooPollStatement() {
+    return currentFooPollStatement;
+  }
+
+  protected Statement getCurrentBarPollStatement() {
+    return currentBarPollStatement;
   }
 }

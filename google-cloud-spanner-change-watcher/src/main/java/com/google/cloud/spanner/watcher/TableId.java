@@ -19,6 +19,7 @@ package com.google.cloud.spanner.watcher;
 import com.google.api.client.util.Preconditions;
 import com.google.cloud.spanner.DatabaseId;
 import com.google.common.base.Strings;
+import java.util.Objects;
 
 public class TableId {
   public static class Builder {
@@ -106,5 +107,22 @@ public class TableId {
   @Override
   public String toString() {
     return fullName;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(databaseId, catalog, schema, table);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (!(o instanceof TableId)) {
+      return false;
+    }
+    TableId other = (TableId) o;
+    return Objects.equals(databaseId, other.databaseId)
+        && Objects.equals(catalog, other.catalog)
+        && Objects.equals(schema, other.schema)
+        && Objects.equals(table, other.table);
   }
 }

@@ -16,21 +16,20 @@
 
 package com.google.cloud.spanner.watcher;
 
-import com.google.api.core.ApiFuture;
+import com.google.api.core.ApiService;
+import com.google.api.core.ApiService.State;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import java.util.Collection;
 
 /** Interface for capturing changes to a set of tables in a Spanner database. */
-public interface SpannerDatabaseChangeWatcher {
+public interface SpannerDatabaseChangeWatcher extends ApiService {
   /** Returns the ids of the tables that are monitored by this watcher. */
   Collection<TableId> getTables();
 
-  /** Returns the watcher for the given table. */
-  SpannerTableChangeWatcher getCapturer(TableId table);
-
-  /** Run this watcher and report all changed rows to the given {@link RowChangeCallback}. */
-  void start(RowChangeCallback callback);
-
-  /** Stop this watcher. */
-  ApiFuture<Void> stopAsync();
+  /**
+   * Adds a {@link RowChangeCallback} for this {@link SpannerDatabaseChangeWatcher}. Callbacks may
+   * only be added when the {@link #state()} of this {@link SpannerDatabaseChangeWatcher} is {@link
+   * State#NEW}
+   */
+  void addCallback(RowChangeCallback callback);
 }

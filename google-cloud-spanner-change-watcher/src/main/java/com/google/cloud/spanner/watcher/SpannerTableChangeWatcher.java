@@ -16,13 +16,13 @@
 
 package com.google.cloud.spanner.watcher;
 
-import com.google.api.core.ApiFuture;
+import com.google.api.core.ApiService;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.StructReader;
 
 /** Interface for capturing changes to a single Spanner table. */
-public interface SpannerTableChangeWatcher {
+public interface SpannerTableChangeWatcher extends ApiService {
 
   /** Returns the id of the table that is monitored by this watcher. */
   TableId getTable();
@@ -46,9 +46,10 @@ public interface SpannerTableChangeWatcher {
     void rowChange(TableId table, Row row, Timestamp commitTimestamp);
   }
 
-  /** Run this watcher and report all changed rows to the given {@link RowChangeCallback}. */
-  void start(RowChangeCallback callback);
-
-  /** Stop this change watcher. */
-  ApiFuture<Void> stopAsync();
+  /**
+   * Adds a {@link RowChangeCallback} for this {@link SpannerTableChangeWatcher}. Callbacks may only
+   * be added when the {@link #state()} of this {@link SpannerTableChangeWatcher} is {@link
+   * State#NEW}
+   */
+  void addCallback(RowChangeCallback callback);
 }

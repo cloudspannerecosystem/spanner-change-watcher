@@ -18,13 +18,21 @@ package com.google.cloud.spanner.watcher;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.api.core.ApiService.Listener;
+import com.google.api.core.ApiService.State;
+import com.google.api.core.SettableApiFuture;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.DatabaseId;
+import com.google.cloud.spanner.MockSpannerServiceImpl.StatementResult;
+import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
+import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.Status;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -34,33 +42,109 @@ import org.threeten.bp.Duration;
 public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
   @Test
   public void testReceiveChanges() throws Exception {
+    Spanner spanner = getSpanner();
     DatabaseId db = DatabaseId.of("p", "i", "d");
-    try {
-      SpannerDatabaseTailer tailer =
-          SpannerDatabaseTailer.newBuilder(spanner, db)
-              .setAllTables()
-              .setPollInterval(Duration.ofSeconds(100L))
-              .setCommitTimestampRepository(
-                  SpannerCommitTimestampRepository.newBuilder(spanner, db)
-                      .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
-                      .build())
-              .build();
-      final AtomicInteger receivedRows = new AtomicInteger();
-      final CountDownLatch latch = new CountDownLatch(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
-      tailer.start(
-          new RowChangeCallback() {
-            @Override
-            public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
-              latch.countDown();
-              receivedRows.incrementAndGet();
+    SpannerDatabaseTailer tailer =
+        SpannerDatabaseTailer.newBuilder(spanner, db)
+            .setAllTables()
+            .setPollInterval(Duration.ofMillis(10L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, db)
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    final AtomicInteger receivedRows = new AtomicInteger();
+    final CountDownLatch latch = new CountDownLatch(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            latch.countDown();
+            receivedRows.incrementAndGet();
+          }
+        });
+    tailer.startAsync().awaitRunning();
+    latch.await(5L, TimeUnit.SECONDS);
+    tailer.stopAsync().awaitTerminated();
+    assertThat(receivedRows.get()).isEqualTo(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
+  }
+
+  @Test
+  public void testTableNotFoundDuringInitialization() throws Exception {
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    SpannerDatabaseTailer tailer =
+        SpannerDatabaseTailer.newBuilder(spanner, db)
+            // Explicitly including a non-existing or invalid table will cause the
+            // SpannerDatabaseTailer to fail during startup.
+            .includeTables("Foo", "Bar", "NonExistingTable")
+            .build();
+    SettableApiFuture<Boolean> res = SettableApiFuture.create();
+    tailer.addListener(
+        new Listener() {
+          @Override
+          public void failed(State from, Throwable failure) {
+            if (from != State.STARTING) {
+              res.setException(new AssertionError("expected from State to be STARTING"));
             }
-          });
-      latch.await(5L, TimeUnit.SECONDS);
-      tailer.stopAsync().get();
-      assertThat(receivedRows.get()).isEqualTo(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
-    } catch (Throwable t) {
-      t.printStackTrace();
-      throw t;
+            res.set(Boolean.TRUE);
+          }
+        },
+        MoreExecutors.directExecutor());
+    tailer.startAsync();
+    assertThat(res.get(5L, TimeUnit.SECONDS)).isTrue();
+  }
+
+  @Test
+  public void testTableDeleted() throws Exception {
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    SpannerDatabaseTailer tailer =
+        SpannerDatabaseTailer.newBuilder(spanner, db)
+            .setAllTables()
+            .setPollInterval(Duration.ofMillis(10L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, db)
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    final AtomicInteger receivedRows = new AtomicInteger();
+    final CountDownLatch latch = new CountDownLatch(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            latch.countDown();
+            receivedRows.incrementAndGet();
+          }
+        });
+    SettableApiFuture<Boolean> res = SettableApiFuture.create();
+    tailer.addListener(
+        new Listener() {
+          @Override
+          public void failed(State from, Throwable failure) {
+            if (from != State.RUNNING) {
+              res.setException(new AssertionError("expected from State to be RUNNING"));
+            }
+            res.set(Boolean.TRUE);
+          }
+        },
+        MoreExecutors.directExecutor());
+    tailer.startAsync().awaitRunning();
+    latch.await(5L, TimeUnit.SECONDS);
+    assertThat(receivedRows.get()).isEqualTo(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
+    // Now simulate that the table has been deleted.
+    Level currentLevel = SpannerTableTailer.logger.getLevel();
+    try {
+      SpannerTableTailer.logger.setLevel(Level.OFF);
+      mockSpanner.putStatementResult(
+          StatementResult.exception(
+              getCurrentBarPollStatement(),
+              Status.NOT_FOUND.withDescription("Table not found").asRuntimeException()));
+      assertThat(res.get(5L, TimeUnit.SECONDS)).isTrue();
+    } finally {
+      SpannerTableTailer.logger.setLevel(currentLevel);
     }
+    assertThat(tailer.state()).isEqualTo(State.FAILED);
   }
 }

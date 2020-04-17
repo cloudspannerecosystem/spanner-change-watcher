@@ -274,7 +274,7 @@ public class ITArchiverTest {
     final CountDownLatch latch = new CountDownLatch(3);
     Spanner spanner = env.getSpanner();
     DatabaseClient client = spanner.getDatabaseClient(database.getId());
-    SpannerTableChangeWatcher capturer =
+    SpannerTableChangeWatcher watcher =
         SpannerTableTailer.newBuilder(spanner, TableId.of(database.getId(), "NUMBERS"))
             .setPollInterval(Duration.ofMillis(50L))
             .setCommitTimestampRepository(
@@ -283,7 +283,7 @@ public class ITArchiverTest {
                     .build())
             .build();
     SpannerTableChangeEventPublisher eventPublisher =
-        SpannerTableChangeEventPublisher.newBuilder(capturer, client)
+        SpannerTableChangeEventPublisher.newBuilder(watcher, client)
             .setTopicName(
                 String.format(
                     "projects/%s/topics/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, env.topicId))
@@ -307,7 +307,7 @@ public class ITArchiverTest {
                   }
                 })
             .build();
-    eventPublisher.start();
+    eventPublisher.startAsync().awaitRunning();
     client.writeAtLeastOnce(
         Arrays.asList(
             Mutation.newInsertOrUpdateBuilder("NUMBERS")
@@ -348,7 +348,6 @@ public class ITArchiverTest {
     assertThat(blobs).hasSize(expectedBlobIds.size());
     logger.log(Level.INFO, "Changes have been written to Cloud Storage");
 
-    eventPublisher.stop();
-    assertThat(eventPublisher.awaitTermination(10L, TimeUnit.SECONDS)).isTrue();
+    eventPublisher.stopAsync().awaitTerminated(10L, TimeUnit.SECONDS);
   }
 }

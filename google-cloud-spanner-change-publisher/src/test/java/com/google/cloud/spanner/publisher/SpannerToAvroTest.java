@@ -540,7 +540,7 @@ public class SpannerToAvroTest {
     DatabaseClient client = mock(DatabaseClient.class);
     ReadContext context = mock(ReadContext.class);
     when(client.singleUse()).thenReturn(context);
-    when(context.executeQuery(
+    when(context.executeQueryAsync(
             Statement.newBuilder(SpannerUtils.FIND_COMMIT_TIMESTAMP_COLUMN_QUERY)
                 .bind("catalog")
                 .to("")
@@ -549,7 +549,7 @@ public class SpannerToAvroTest {
                 .bind("table")
                 .to("FOO")
                 .build()))
-        .thenReturn(createTimestampColumnResultSet());
+        .thenReturn(ResultSets.toAsyncResultSet(createTimestampColumnResultSet()));
     when(context.executeQuery(
             Statement.newBuilder(SpannerToAvro.SCHEMA_QUERY)
                 .bind("catalog")

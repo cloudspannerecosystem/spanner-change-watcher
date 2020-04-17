@@ -28,6 +28,7 @@ import com.google.cloud.pubsub.v1.AckReplyConsumer;
 import com.google.cloud.pubsub.v1.MessageReceiver;
 import com.google.cloud.pubsub.v1.Subscriber;
 import com.google.cloud.spanner.DatabaseId;
+import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.publisher.MockPubSubServer.MockPublisherServiceImpl;
 import com.google.cloud.spanner.publisher.MockPubSubServer.MockSubscriberServiceImpl;
 import com.google.cloud.spanner.watcher.SpannerCommitTimestampRepository;
@@ -112,11 +113,12 @@ public class SpannerDatabaseChangeEventPublisherTest extends AbstractMockServerT
             .build();
     subscriber.startAsync().awaitRunning();
 
+    Spanner spanner = getSpanner();
     DatabaseId db = DatabaseId.of("p", "i", "d");
     SpannerDatabaseTailer tailer =
         SpannerDatabaseTailer.newBuilder(spanner, db)
             .setAllTables()
-            .setPollInterval(Duration.ofSeconds(100L))
+            .setPollInterval(Duration.ofMillis(10L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, db)
                     .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
@@ -128,11 +130,10 @@ public class SpannerDatabaseChangeEventPublisherTest extends AbstractMockServerT
             .setEndpoint("localhost:" + pubSubServer.getPort())
             .setTopicNameFormat("projects/p/topics/%table%-updates")
             .build();
-    publisher.start();
+    publisher.startAsync().awaitRunning();
     latch.await(10L, TimeUnit.SECONDS);
-    publisher.stop();
     assertThat(receivedMessages.get()).isEqualTo(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
-    publisher.awaitTermination(5L, TimeUnit.SECONDS);
+    publisher.stopAsync().awaitTerminated();
     subscriber.stopAsync().awaitTerminated();
   }
 }

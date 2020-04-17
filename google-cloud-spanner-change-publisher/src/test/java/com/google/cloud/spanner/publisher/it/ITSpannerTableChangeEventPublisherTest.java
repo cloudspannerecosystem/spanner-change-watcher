@@ -103,7 +103,7 @@ public class ITSpannerTableChangeEventPublisherTest {
   public void testEventPublisher() throws Exception {
     Spanner spanner = env.getSpanner();
     DatabaseClient client = spanner.getDatabaseClient(database.getId());
-    SpannerTableChangeWatcher capturer =
+    SpannerTableChangeWatcher watcher =
         SpannerTableTailer.newBuilder(spanner, TableId.of(database.getId(), "NUMBERS"))
             .setPollInterval(Duration.ofMillis(50L))
             .setCommitTimestampRepository(
@@ -113,13 +113,13 @@ public class ITSpannerTableChangeEventPublisherTest {
                     .build())
             .build();
     SpannerTableChangeEventPublisher eventPublisher =
-        SpannerTableChangeEventPublisher.newBuilder(capturer, client)
+        SpannerTableChangeEventPublisher.newBuilder(watcher, client)
             .setTopicName(
                 String.format(
                     "projects/%s/topics/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, env.topicId))
             .setCredentials(PubsubTestHelper.getPubSubCredentials())
             .build();
-    eventPublisher.start();
+    eventPublisher.startAsync().awaitRunning();
 
     receivedMessagesCount = new CountDownLatch(3);
     client.writeAtLeastOnce(
@@ -150,7 +150,6 @@ public class ITSpannerTableChangeEventPublisherTest {
                 .build()));
     receivedMessagesCount.await(10L, TimeUnit.SECONDS);
     assertThat(receivedMessages).hasSize(3);
-    eventPublisher.stop();
-    assertThat(eventPublisher.awaitTermination(10L, TimeUnit.SECONDS)).isTrue();
+    eventPublisher.stopAsync().awaitTerminated();
   }
 }
