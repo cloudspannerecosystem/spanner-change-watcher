@@ -117,7 +117,7 @@ public class SpannerDatabaseChangeEventPublisherTest extends AbstractMockServerT
     DatabaseId db = DatabaseId.of("p", "i", "d");
     SpannerDatabaseTailer tailer =
         SpannerDatabaseTailer.newBuilder(spanner, db)
-            .setAllTables()
+            .allTables()
             .setPollInterval(Duration.ofMillis(10L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, db)
