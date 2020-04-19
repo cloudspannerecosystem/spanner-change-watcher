@@ -305,8 +305,11 @@ public class SpannerDatabaseTailer extends AbstractApiService
                     c.awaitTerminated();
                   }
                 }
+                if (isOwnedExecutor) {
+                  executor.shutdown();
+                }
+                notifyFailed(failure);
               }
-              notifyFailed(failure);
             }
 
             @Override
@@ -320,8 +323,8 @@ public class SpannerDatabaseTailer extends AbstractApiService
                     return;
                   }
                 }
+                notifyStarted();
               }
-              notifyStarted();
             }
 
             @Override
@@ -335,8 +338,11 @@ public class SpannerDatabaseTailer extends AbstractApiService
                     return;
                   }
                 }
+                if (isOwnedExecutor) {
+                  executor.shutdown();
+                }
+                notifyStopped();
               }
-              notifyStopped();
             }
           },
           MoreExecutors.directExecutor());

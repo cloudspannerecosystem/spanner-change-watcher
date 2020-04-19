@@ -23,9 +23,14 @@ import com.google.cloud.spanner.AsyncResultSet.CallbackResponse;
 import com.google.cloud.spanner.AsyncResultSet.ReadyCallback;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.ErrorCode;
+import com.google.cloud.spanner.Key;
+import com.google.cloud.spanner.ResultSet;
 import com.google.cloud.spanner.SpannerExceptionFactory;
 import com.google.cloud.spanner.Statement;
+import com.google.cloud.spanner.StructReader;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 
 /** Utils for getting commonly needed schema information from a Spanner database. */
@@ -38,6 +43,16 @@ public class SpannerUtils {
           + "WHERE TABLE_CATALOG = @catalog\n"
           + "AND TABLE_SCHEMA = @schema\n"
           + "AND TABLE_NAME = @table";
+
+  @VisibleForTesting
+  static final String PK_QUERY =
+      "SELECT COLUMN_NAME\n"
+          + "FROM INFORMATION_SCHEMA.INDEX_COLUMNS\n"
+          + "INNER JOIN INFORMATION_SCHEMA.INDEXES ON INDEX_COLUMNS.INDEX_NAME=INDEXES.INDEX_NAME AND INDEXES.INDEX_TYPE='PRIMARY_KEY'"
+          + "WHERE INDEX_COLUMNS.TABLE_CATALOG = @catalog\n"
+          + "AND INDEX_COLUMNS.TABLE_SCHEMA = @schema\n"
+          + "AND INDEX_COLUMNS.TABLE_NAME = @table\n"
+          + "ORDER BY INDEX_COLUMNS.ORDINAL_POSITION";
 
   /** Returns the name of the commit timestamp column of the given table. */
   public static ApiFuture<String> getTimestampColumn(DatabaseClient client, TableId table) {
@@ -87,5 +102,66 @@ public class SpannerUtils {
           });
     }
     return res;
+  }
+
+  public static ApiFuture<ImmutableList<String>> getPrimaryKeyColumns(
+      DatabaseClient client, TableId table) {
+    try (AsyncResultSet rs =
+        client
+            .singleUse()
+            .executeQueryAsync(
+                Statement.newBuilder(PK_QUERY)
+                    .bind("catalog")
+                    .to(table.getCatalog())
+                    .bind("schema")
+                    .to(table.getSchema())
+                    .bind("table")
+                    .to(table.getTable())
+                    .build())) {
+      return rs.toListAsync(
+          new Function<StructReader, String>() {
+            @Override
+            public String apply(StructReader input) {
+              return input.getString(0);
+            }
+          },
+          MoreExecutors.directExecutor());
+    }
+  }
+
+  public static Key buildKey(Iterable<String> pkColumns, ResultSet rs) {
+    Key.Builder kb = Key.newBuilder();
+    for (String pkCol : pkColumns) {
+      switch (rs.getColumnType(pkCol).getCode()) {
+        case BOOL:
+          kb.append(rs.getBoolean(pkCol));
+          break;
+        case BYTES:
+          kb.append(rs.getBytes(pkCol));
+          break;
+        case DATE:
+          kb.append(rs.getDate(pkCol));
+          break;
+        case FLOAT64:
+          kb.append(rs.getDouble(pkCol));
+          break;
+        case INT64:
+          kb.append(rs.getLong(pkCol));
+          break;
+        case STRING:
+          kb.append(rs.getString(pkCol));
+          break;
+        case TIMESTAMP:
+          kb.append(rs.getTimestamp(pkCol));
+          break;
+        case STRUCT:
+        case ARRAY:
+          throw new IllegalArgumentException(
+              "Invalid type for primary key: " + rs.getColumnType(pkCol));
+        default:
+          throw new IllegalArgumentException("Unknown type: " + rs.getColumnType(pkCol));
+      }
+    }
+    return kb.build();
   }
 }
