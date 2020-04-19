@@ -45,19 +45,6 @@ import org.threeten.bp.Duration;
  */
 public class SpannerTableTailer extends AbstractApiService implements SpannerTableChangeWatcher {
   static final Logger logger = Logger.getLogger(SpannerTableTailer.class.getName());
-  static final String PK_QUERY =
-      "SELECT *\n"
-          + "FROM INFORMATION_SCHEMA.INDEX_COLUMNS\n"
-          + "WHERE TABLE_CATALOG = @catalog\n"
-          + "AND TABLE_SCHEMA = @schema\n"
-          + "AND TABLE_NAME = @table";
-  static final String SCHEMA_QUERY =
-      "SELECT COLUMN_NAME, SPANNER_TYPE, IS_NULLABLE\n"
-          + "FROM INFORMATION_SCHEMA.COLUMNS\n"
-          + "WHERE TABLE_CATALOG = @catalog\n"
-          + "AND TABLE_SCHEMA = @schema\n"
-          + "AND TABLE_NAME = @table\n"
-          + "ORDER BY ORDINAL_POSITION";
   static final String POLL_QUERY =
       "SELECT *\n" + "FROM %s\n" + "WHERE `%s`>@prevCommitTimestamp ORDER BY `%s`";
 
@@ -147,13 +134,13 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
 
   @Override
   protected void doStart() {
-    this.lastSeenCommitTimestamp = commitTimestampRepository.get(table);
     ApiFuture<String> commitTimestampColFut = SpannerUtils.getTimestampColumn(client, table);
     commitTimestampColFut.addListener(
         new Runnable() {
           @Override
           public void run() {
             try {
+              lastSeenCommitTimestamp = commitTimestampRepository.get(table);
               commitTimestampColumn = Futures.getUnchecked(commitTimestampColFut);
               pollStatementBuilder =
                   Statement.newBuilder(
@@ -197,7 +184,6 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   }
 
   class SpannerTailerCallback implements ReadyCallback {
-
     private void scheduleNextPollOrStop() {
       // Store the last seen commit timestamp in the repository to ensure that the poller will pick
       // up at the right timestamp again if it is stopped or fails.
@@ -255,8 +241,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
               return CallbackResponse.CONTINUE;
             case OK:
               Timestamp ts = resultSet.getTimestamp(commitTimestampColumn);
+              Row row = new RowImpl(resultSet);
               for (RowChangeCallback callback : callbacks) {
-                callback.rowChange(table, new RowImpl(resultSet), ts);
+                callback.rowChange(table, row, ts);
               }
               if (ts.compareTo(lastSeenCommitTimestamp) > 0) {
                 lastSeenCommitTimestamp = ts;

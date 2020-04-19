@@ -150,9 +150,6 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
         new Listener() {
           @Override
           public void failed(State from, Throwable failure) {
-            System.err.printf(
-                "Database change watcher failed.%n    State before failure: %s%n    Error: %s%n",
-                from, failure.getMessage());
             if (from != State.RUNNING) {
               res.setException(new AssertionError("expected from State to be RUNNING"));
             }
