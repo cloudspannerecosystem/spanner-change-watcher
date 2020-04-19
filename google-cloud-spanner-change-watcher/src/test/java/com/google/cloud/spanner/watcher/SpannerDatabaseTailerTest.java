@@ -30,6 +30,8 @@ import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallb
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Status;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -46,7 +48,7 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
     DatabaseId db = DatabaseId.of("p", "i", "d");
     SpannerDatabaseTailer tailer =
         SpannerDatabaseTailer.newBuilder(spanner, db)
-            .setAllTables()
+            .allTables()
             .setPollInterval(Duration.ofMillis(10L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, db)
@@ -101,7 +103,7 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
     DatabaseId db = DatabaseId.of("p", "i", "d");
     SpannerDatabaseTailer tailer =
         SpannerDatabaseTailer.newBuilder(spanner, db)
-            .setAllTables()
+            .allTables()
             .setPollInterval(Duration.ofMillis(10L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, db)
@@ -146,5 +148,40 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
       SpannerTableTailer.logger.setLevel(currentLevel);
     }
     assertThat(tailer.state()).isEqualTo(State.FAILED);
+  }
+
+  @Test
+  public void testCustomExecutor() throws Exception {
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    // A single-threaded executor will cause the pollers for the different tables to be executed
+    // sequentially. All changes should still be reported, but there could be a delay.
+    ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+    SpannerDatabaseTailer tailer =
+        SpannerDatabaseTailer.newBuilder(spanner, db)
+            .setExecutor(executor)
+            .allTables()
+            .setPollInterval(Duration.ofMillis(10L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, db)
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    final AtomicInteger receivedRows = new AtomicInteger();
+    final CountDownLatch latch = new CountDownLatch(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            latch.countDown();
+            receivedRows.incrementAndGet();
+          }
+        });
+    tailer.startAsync().awaitRunning();
+    latch.await(5L, TimeUnit.SECONDS);
+    tailer.stopAsync().awaitTerminated();
+    assertThat(receivedRows.get()).isEqualTo(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
+    assertThat(executor.isShutdown()).isFalse();
+    executor.shutdown();
   }
 }

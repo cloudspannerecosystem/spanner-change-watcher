@@ -77,7 +77,7 @@ public class ITSpannerDatabaseTailerTest {
     Spanner spanner = env.getSpanner();
     SpannerDatabaseTailer tailer =
         SpannerDatabaseTailer.newBuilder(spanner, database.getId())
-            .setAllTables()
+            .allTables()
             .setPollInterval(Duration.ofMillis(10L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())

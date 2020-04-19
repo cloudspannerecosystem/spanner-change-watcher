@@ -32,6 +32,8 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Status;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -148,6 +150,9 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
         new Listener() {
           @Override
           public void failed(State from, Throwable failure) {
+            System.err.printf(
+                "Database change watcher failed.%n    State before failure: %s%n    Error: %s%n",
+                from, failure.getMessage());
             if (from != State.RUNNING) {
               res.setException(new AssertionError("expected from State to be RUNNING"));
             }
@@ -234,5 +239,38 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
         setupResults();
       }
     }
+  }
+
+  @Test
+  public void testCustomExecutor() throws Exception {
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    final AtomicInteger receivedRows = new AtomicInteger();
+    final CountDownLatch latch = new CountDownLatch(SELECT_FOO_ROW_COUNT);
+    ScheduledExecutorService executor = Executors.newScheduledThreadPool(8);
+    SpannerTableTailer tailer =
+        SpannerTableTailer.newBuilder(spanner, TableId.of(db, "Foo"))
+            .setExecutor(executor)
+            .setPollInterval(Duration.ofMillis(10L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, db)
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            receivedRows.incrementAndGet();
+            latch.countDown();
+          }
+        });
+    tailer.startAsync().awaitRunning();
+    latch.await(5L, TimeUnit.SECONDS);
+    tailer.stopAsync().awaitTerminated();
+    assertThat(receivedRows.get()).isEqualTo(SELECT_FOO_ROW_COUNT);
+    // A custom executor should not be managed by the change watcher.
+    assertThat(executor.isShutdown()).isFalse();
+    executor.shutdown();
   }
 }

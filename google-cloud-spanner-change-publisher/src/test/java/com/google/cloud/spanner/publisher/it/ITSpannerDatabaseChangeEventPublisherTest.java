@@ -139,7 +139,7 @@ public class ITSpannerDatabaseChangeEventPublisherTest {
     DatabaseClient client = spanner.getDatabaseClient(database.getId());
     SpannerDatabaseChangeWatcher watcher =
         SpannerDatabaseTailer.newBuilder(spanner, database.getId())
-            .setAllTables()
+            .allTables()
             .setPollInterval(Duration.ofMillis(50L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())

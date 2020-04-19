@@ -77,7 +77,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
      * commit timestamp column are automatically ignored. Additional tables can be excluded by
      * calling {@link #excludeTables(String...)}.
      */
-    public Builder setAllTables() {
+    public Builder allTables() {
       Preconditions.checkState(
           includedTables.isEmpty(), "Cannot include specific tables in combination with allTables");
       this.allTables = true;
@@ -86,9 +86,8 @@ public class SpannerDatabaseTailer extends AbstractApiService
 
     /**
      * Instructs the {@link SpannerDatabaseTailer} to only emit changes for these specific tables.
-     * This option cannot be used in combination with {@link #setAllTables()}. If you both exclude
-     * and include the same table, the exclusion will get priority and the table will not be
-     * included.
+     * This option cannot be used in combination with {@link #allTables()}. If you both exclude and
+     * include the same table, the exclusion will get priority and the table will not be included.
      */
     public Builder includeTables(String... tables) {
       Preconditions.checkState(
@@ -99,8 +98,8 @@ public class SpannerDatabaseTailer extends AbstractApiService
 
     /**
      * Instructs the {@link SpannerDatabaseTailer} to exclude these tables from change events. This
-     * option can be used in combination with {@link #setAllTables()} to include all tables except
-     * for a specfic list.
+     * option can be used in combination with {@link #allTables()} to include all tables except for
+     * a specfic list.
      */
     public Builder excludeTables(String... excludedTables) {
       this.excludedTables.addAll(Arrays.asList(excludedTables));
