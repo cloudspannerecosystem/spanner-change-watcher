@@ -14,9 +14,9 @@ or entire databases. Add the following dependency to your project:
 
 ```xml
 <dependency>
-	<groupId>com.google.cloud</groupId>
-	<artifactId>google-cloud-spanner-change-watcher</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+  <groupId>com.google.cloud</groupId>
+  <artifactId>google-cloud-spanner-change-watcher</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
 </dependency>
 ```
 

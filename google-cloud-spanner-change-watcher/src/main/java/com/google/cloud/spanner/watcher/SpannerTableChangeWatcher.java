@@ -36,7 +36,8 @@ public interface SpannerTableChangeWatcher extends ApiService {
   /** Interface for receiving asynchronous callbacks when a row has been inserted or updated. */
   interface RowChangeCallback {
     /**
-     * Called once for each detected insert or update of a row.
+     * Called once for each detected insert or update of a row. Calls are guaranteed to be in order
+     * of detected changes.
      *
      * @param table The table where the data was inserted or updated.
      * @param row The updated data of the row that was inserted or updated.
@@ -49,7 +50,13 @@ public interface SpannerTableChangeWatcher extends ApiService {
   /**
    * Adds a {@link RowChangeCallback} for this {@link SpannerTableChangeWatcher}. Callbacks may only
    * be added when the {@link #state()} of this {@link SpannerTableChangeWatcher} is {@link
-   * State#NEW}
+   * State#NEW}. Callbacks should be lightweight and non-blocking. The callback should hand off any
+   * heavy computations or blocking operations to a non-blocking executor or buffer.
+   *
+   * <p>The {@link SpannerTableChangeWatcher} guarantees that at most one {@link RowChangeCallback}
+   * will be active at any given time, and all callbacks will receive all changes in order. There is
+   * no guarantee in the order which callback is called first if a {@link SpannerTableChangeWatcher}
+   * has registered multiple callbacks.
    */
   void addCallback(RowChangeCallback callback);
 }
