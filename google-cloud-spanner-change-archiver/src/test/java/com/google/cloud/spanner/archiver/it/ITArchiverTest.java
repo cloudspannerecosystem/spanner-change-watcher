@@ -46,7 +46,6 @@ import com.google.cloud.spanner.archiver.it.ArchiverTestHelper.ITArchiverEnv;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishListener;
 import com.google.cloud.spanner.publisher.it.PubsubTestHelper;
-import com.google.cloud.spanner.watcher.SpannerCommitTimestampRepository;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerTableTailer;
 import com.google.cloud.spanner.watcher.TableId;
@@ -277,10 +276,6 @@ public class ITArchiverTest {
     SpannerTableChangeWatcher watcher =
         SpannerTableTailer.newBuilder(spanner, TableId.of(database.getId(), "NUMBERS"))
             .setPollInterval(Duration.ofMillis(50L))
-            .setCommitTimestampRepository(
-                SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
-                    .setCreateTableIfNotExists()
-                    .build())
             .build();
     SpannerTableChangeEventPublisher eventPublisher =
         SpannerTableChangeEventPublisher.newBuilder(watcher, client)

@@ -80,7 +80,6 @@ public class ITSpannerTableTailerTest {
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
                     .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
-                    .setCreateTableIfNotExists()
                     .build())
             .build();
     tailer.addCallback(

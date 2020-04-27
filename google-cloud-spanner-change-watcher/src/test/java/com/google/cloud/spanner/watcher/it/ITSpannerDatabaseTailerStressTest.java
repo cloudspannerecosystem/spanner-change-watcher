@@ -152,7 +152,6 @@ public class ITSpannerDatabaseTailerStressTest {
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
                     .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
-                    .setCreateTableIfNotExists()
                     .build())
             .build();
     final CountDownLatch latch = new CountDownLatch(1);

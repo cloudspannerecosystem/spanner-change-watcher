@@ -210,7 +210,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   @Override
   protected void doStop() {
     synchronized (lock) {
-      if (scheduled.cancel(false)) {
+      if (scheduled == null || scheduled.cancel(false)) {
         if (isOwnedExecutor) {
           executor.shutdown();
         }
