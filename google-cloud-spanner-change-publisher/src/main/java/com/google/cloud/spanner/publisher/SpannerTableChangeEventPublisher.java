@@ -48,18 +48,21 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Publishes change events from a Spanner table to a PubSub topic.
+ * Publishes change events from a single Spanner table to a single Google Cloud Pubsub topic.
  *
  * <p>The changes to the table are emitted from a {@link SpannerTableChangeWatcher} and then sent to
- * Pub/Sub by this event publisher.
+ * Google Cloud Pubsub by this event publisher.
  */
 public class SpannerTableChangeEventPublisher extends AbstractApiService implements ApiService {
   private static final Logger logger =
       Logger.getLogger(SpannerTableChangeEventPublisher.class.getName());
 
-  /** Interface for getting a callback when a message is published to PubSub. */
+  /**
+   * Interface for getting a callback when a message is published to PubSub. This can be used for
+   * monitoring and logging purposes, but is not required for publishing changes to Pubsub.
+   */
   public static interface PublishListener {
-    /** Called when a change is successfully published to PubSub. */
+    /** Called when a change is successfully published to Pubsub. */
     void onPublished(TableId table, Timestamp commitTimestamp, String messageId);
   }
 
@@ -68,6 +71,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
     public void onPublished(TableId table, Timestamp commitTimestamp, String messageId) {}
   }
 
+  /** Builder for a {@link SpannerTableChangeEventPublisher}. */
   public static class Builder {
     private final SpannerTableChangeWatcher watcher;
     private final DatabaseClient client;
@@ -84,6 +88,12 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
       this.client = client;
     }
 
+    /**
+     * Sets a {@link PublishListener} for the {@link SpannerTableChangeEventPublisher}. This
+     * listener will receive a callback for each message that is published to Pubsub. This can be
+     * used for monitoring and logging purposes, but is not required for publishing changes to
+     * Pubsub.
+     */
     public Builder setListener(PublishListener publishListener) {
       this.listener = Preconditions.checkNotNull(publishListener);
       return this;
@@ -98,13 +108,18 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
       return this;
     }
 
+    /**
+     * The {@link SpannerTableChangeEventPublisher} needs to perform a number of administrative
+     * tasks during startup and shutdown, and will use this executor for those tasks. The default
+     * will use a cached thread pool executor.
+     */
     public Builder setStartStopExecutor(ExecutorService executor) {
       this.startStopExecutor = executor;
       return this;
     }
 
     /**
-     * Sets the credentials to use to publish to Pub/Sub. If no credentials are set, the credentials
+     * Sets the credentials to use to publish to Pubsub. If no credentials are set, the credentials
      * returned by {@link GoogleCredentials#getApplicationDefault()} will be used.
      */
     public Builder setCredentials(Credentials credentials) {
@@ -115,12 +130,20 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
       return this;
     }
 
+    /**
+     * Set a custom endpoint for Pubsub. Can be used for testing against a local mock server or
+     * emulator.
+     */
     @VisibleForTesting
     Builder setEndpoint(String endpoint) {
       this.endpoint = Preconditions.checkNotNull(endpoint);
       return this;
     }
 
+    /**
+     * Use a plain text connection in combination with a custom endpoint. Can be used for testing
+     * against a locak mock server or emulator.
+     */
     @VisibleForTesting
     Builder usePlainText() {
       this.usePlainText = true;
@@ -129,7 +152,8 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
 
     /**
      * Sets the {@link Publisher} to use for this event publisher. Use this method if you want to
-     * use custom batching or retry settings for Pub/Sub.
+     * use custom batching or retry settings for Pubsub. If not set, the {@link
+     * SpannerTableChangeEventPublisher} will create a {@link Publisher} using default settings.
      */
     public Builder setPublisher(Publisher publisher) {
       Preconditions.checkState(
@@ -139,6 +163,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
       return this;
     }
 
+    /** Creates the {@link SpannerTableChangeEventPublisher}. */
     public SpannerTableChangeEventPublisher build() throws IOException {
       Preconditions.checkState(publisher != null || topicName != null);
       return new SpannerTableChangeEventPublisher(this);
@@ -146,8 +171,15 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
   }
 
   /**
-   * Creates a new {@link Builder} for a {@link SpannerTableChangeEventPublisher} with the given
-   * {@link SpannerTableChangeWatcher} as its source.
+   * Creates a {@link Builder} for a {@link SpannerTableChangeEventPublisher}.
+   *
+   * @param watcher A {@link SpannerTableChangeWatcher} for the table that this publisher should
+   *     publish the change events for. The {@link SpannerTableChangeWatcher} will be managed by
+   *     this publisher, and should not be started or stopped manually. It is ok to add additional
+   *     {@link RowChangeCallback} to the watcher.
+   * @param client A {@link DatabaseClient} for the database that is being watched for changes. The
+   *     publisher uses this client to query the database for information on the data types and
+   *     primary key of the table that are being watched.
    */
   public static Builder newBuilder(SpannerTableChangeWatcher watcher, DatabaseClient client) {
     Preconditions.checkNotNull(watcher);
