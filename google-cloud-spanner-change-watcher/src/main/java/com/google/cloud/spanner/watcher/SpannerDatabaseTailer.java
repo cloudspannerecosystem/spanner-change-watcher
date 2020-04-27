@@ -39,7 +39,31 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import org.threeten.bp.Duration;
 
-/** Change watcher using polling for one or more tables of a Spanner database. */
+/**
+ * Implementation of the {@link SpannerDatabaseChangeWatcher} interface that continuously polls a
+ * set of tables for changes based on commit timestamp columns in the tables.
+ *
+ * <p>Example usage for watching all tables in a database:
+ *
+ * <pre>{@code
+ * String instance = "my-instance";
+ * String database = "my-database";
+ *
+ * Spanner spanner = SpannerOptions.getDefaultInstance().getService();
+ * DatabaseId databaseId = DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database);
+ * SpannerDatabaseChangeWatcher watcher =
+ *     SpannerDatabaseTailer.newBuilder(spanner, databaseId).allTables().build();
+ * watcher.addCallback(
+ *     new RowChangeCallback() {
+ *       @Override
+ *       public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+ *         System.out.printf(
+ *             "Received change for table %s: %s%n", table, row.asStruct().toString());
+ *       }
+ *     });
+ * watcher.startAsync().awaitRunning();
+ * }</pre>
+ */
 public class SpannerDatabaseTailer extends AbstractApiService
     implements SpannerDatabaseChangeWatcher {
   /** Lists all tables with a commit timestamp column. */
@@ -52,6 +76,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
           + "AND TABLE_SCHEMA = @schema\n"
           + "AND TABLE_NAME IN (SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMN_OPTIONS WHERE OPTION_NAME='allow_commit_timestamp' AND OPTION_VALUE='TRUE')";
 
+  /** Builder for a {@link SpannerDatabaseTailer}. */
   public static class Builder {
     private final Spanner spanner;
     private final DatabaseId databaseId;
@@ -108,9 +133,12 @@ public class SpannerDatabaseTailer extends AbstractApiService
 
     /**
      * Sets a specific {@link CommitTimestampRepository} to use for the {@link
-     * SpannerDatabaseTailer}. The default will use a {@link SpannerCommitTimestampRepository} which
-     * stores the last seen commit timestamp in a table named LAST_SEEN_COMMIT_TIMESTAMPS in the
-     * Spanner database that this {@link SpannerDatabaseTailer} is monitoring.
+     * SpannerDatabaseTailer}.
+     *
+     * <p>The default will use a {@link SpannerCommitTimestampRepository} which stores the last seen
+     * commit timestamp in a table named LAST_SEEN_COMMIT_TIMESTAMPS in the Spanner database that
+     * this {@link SpannerDatabaseTailer} is monitoring. The table will be created if it does not
+     * already exist.
      */
     public Builder setCommitTimestampRepository(CommitTimestampRepository repository) {
       this.commitTimestampRepository = Preconditions.checkNotNull(repository);
@@ -128,8 +156,10 @@ public class SpannerDatabaseTailer extends AbstractApiService
 
     /**
      * Sets a specific {@link ScheduledExecutorService} to use for this {@link
-     * SpannerDatabaseTailer}. The default will use a {@link ScheduledThreadPoolExecutor} with a
-     * core size equal to the number of tables that is being monitored.
+     * SpannerDatabaseTailer}. This executor will be used to execute the poll queries on the tables
+     * and to call the {@link RowChangeCallback}s. The default will use a {@link
+     * ScheduledThreadPoolExecutor} with a core size equal to the number of tables that is being
+     * monitored.
      */
     public Builder setExecutor(ScheduledExecutorService executor) {
       this.executor = Preconditions.checkNotNull(executor);
