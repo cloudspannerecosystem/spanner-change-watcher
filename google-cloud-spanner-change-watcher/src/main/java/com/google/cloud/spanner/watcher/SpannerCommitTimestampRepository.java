@@ -40,7 +40,7 @@ import javax.annotation.Nullable;
  * {@link CommitTimestampRepository} that stores the last seen commit timestamp for a table in a
  * Cloud Spanner database table. The default table definition to use is
  *
- * <pre>
+ * <pre>{@code
  * CREATE TABLE LAST_SEEN_COMMIT_TIMESTAMPS (
  *        DATABASE_NAME STRING(MAX) NOT NULL,
  *        TABLE_CATALOG STRING(MAX) NOT NULL,
@@ -48,7 +48,7 @@ import javax.annotation.Nullable;
  *        TABLE_NAME STRING(MAX) NOT NULL,
  *        LAST_SEEN_COMMIT_TIMESTAMP TIMESTAMP NOT NULL
  * ) PRIMARY KEY (DATABASE_NAME, TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME)
- * </pre>
+ * }</pre>
  *
  * The table name and column names are configurable.
  */

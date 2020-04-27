@@ -21,8 +21,9 @@ import com.google.cloud.spanner.DatabaseId;
 import com.google.common.base.Strings;
 import java.util.Objects;
 
-public class TableId {
-  public static class Builder {
+/** Unique id of a Cloud Spanner table. */
+public final class TableId {
+  static class Builder {
     private final DatabaseId databaseId;
     private final String table;
     private String catalog = "";
@@ -33,25 +34,26 @@ public class TableId {
       this.table = Preconditions.checkNotNull(table);
     }
 
-    public Builder setCatalog(String catalog) {
+    Builder setCatalog(String catalog) {
       this.catalog = Preconditions.checkNotNull(catalog);
       return this;
     }
 
-    public Builder setSchema(String schema) {
+    Builder setSchema(String schema) {
       this.schema = Preconditions.checkNotNull(schema);
       return this;
     }
 
-    public TableId build() {
+    TableId build() {
       return new TableId(this);
     }
   }
 
-  public static Builder newBuilder(DatabaseId databaseId, String table) {
+  static Builder newBuilder(DatabaseId databaseId, String table) {
     return new Builder(databaseId, table);
   }
 
+  /** Creates a {@link TableId} for the given table in the given database. */
   public static TableId of(DatabaseId databaseId, String table) {
     return newBuilder(databaseId, table).build();
   }

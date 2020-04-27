@@ -33,6 +33,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import org.threeten.bp.Duration;
 
+/** Samples for spanner-change-watcher. */
 class Samples {
 
   /** Watch a single table in a database for changes. */

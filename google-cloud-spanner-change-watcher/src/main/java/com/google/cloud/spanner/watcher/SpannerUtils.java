@@ -17,6 +17,7 @@
 package com.google.cloud.spanner.watcher;
 
 import com.google.api.core.ApiFuture;
+import com.google.api.core.InternalApi;
 import com.google.api.core.SettableApiFuture;
 import com.google.cloud.spanner.AsyncResultSet;
 import com.google.cloud.spanner.AsyncResultSet.CallbackResponse;
@@ -34,6 +35,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 
 /** Utils for getting commonly needed schema information from a Spanner database. */
+@InternalApi(
+    "Public visibility for re-use by other spanner-change-watcher libraries. API-breaking changes without prior notice is possible.")
 public class SpannerUtils {
   /** Query for getting the column of a table that holds the commit timestamp. */
   @VisibleForTesting
@@ -55,6 +58,7 @@ public class SpannerUtils {
           + "ORDER BY INDEX_COLUMNS.ORDINAL_POSITION";
 
   /** Returns the name of the commit timestamp column of the given table. */
+  @InternalApi
   public static ApiFuture<String> getTimestampColumn(DatabaseClient client, TableId table) {
     final SettableApiFuture<String> res = SettableApiFuture.create();
     try (AsyncResultSet rs =
@@ -104,6 +108,8 @@ public class SpannerUtils {
     return res;
   }
 
+  /** Returns the primary key columns of a table. */
+  @InternalApi
   public static ApiFuture<ImmutableList<String>> getPrimaryKeyColumns(
       DatabaseClient client, TableId table) {
     try (AsyncResultSet rs =
@@ -129,6 +135,11 @@ public class SpannerUtils {
     }
   }
 
+  /**
+   * Creates a {@link Key} instance from an {@link Iterable} of primary key columns and a {@link
+   * ResultSet} containing the data to use for the key.
+   */
+  @InternalApi
   public static Key buildKey(Iterable<String> pkColumns, ResultSet rs) {
     Key.Builder kb = Key.newBuilder();
     for (String pkCol : pkColumns) {

@@ -25,6 +25,7 @@ import com.google.cloud.spanner.AsyncResultSet.ReadyCallback;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.Statement;
+import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -42,12 +43,35 @@ import org.threeten.bp.Duration;
 /**
  * Implementation of the {@link SpannerTableChangeWatcher} interface that continuously polls a table
  * for changes based on a commit timestamp column in the table.
+ *
+ * <p>Usage:
+ *
+ * <pre>{@code
+ * String instance = "my-instance";
+ * String database = "my-database";
+ * String table = "MY_TABLE";
+ *
+ * Spanner spanner = SpannerOptions.getDefaultInstance().getService();
+ * TableId tableId =
+ *     TableId.of(DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database), table);
+ * SpannerTableChangeWatcher watcher = SpannerTableTailer.newBuilder(spanner, tableId).build();
+ * watcher.addCallback(
+ *     new RowChangeCallback() {
+ *       @Override
+ *       public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+ *         System.out.printf(
+ *             "Received change for table %s: %s%n", table, row.asStruct().toString());
+ *       }
+ *     });
+ * watcher.startAsync().awaitRunning();
+ * }</pre>
  */
 public class SpannerTableTailer extends AbstractApiService implements SpannerTableChangeWatcher {
   static final Logger logger = Logger.getLogger(SpannerTableTailer.class.getName());
   static final String POLL_QUERY =
       "SELECT *\n" + "FROM %s\n" + "WHERE `%s`>@prevCommitTimestamp ORDER BY `%s`";
 
+  /** Builder for a {@link SpannerTableTailer}. */
   public static class Builder {
     private final Spanner spanner;
     private final TableId table;
@@ -62,21 +86,35 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
           SpannerCommitTimestampRepository.newBuilder(spanner, table.getDatabaseId()).build();
     }
 
+    /**
+     * Sets the {@link CommitTimestampRepository} to use with this {@link SpannerTableTailer}.
+     *
+     * <p>If none is set, it will default to a {@link SpannerCommitTimestampRepository} which stores
+     * the last seen commit timestamp in a table named LAST_SEEN_COMMIT_TIMESTAMPS. The table will
+     * be created if it does not yet exist.
+     */
     public Builder setCommitTimestampRepository(CommitTimestampRepository repository) {
       this.commitTimestampRepository = Preconditions.checkNotNull(repository);
       return this;
     }
 
+    /** Sets the poll interval for the table. Defaults to 1 second. */
     public Builder setPollInterval(Duration interval) {
       this.pollInterval = Preconditions.checkNotNull(interval);
       return this;
     }
 
+    /**
+     * Sets the executor to use to poll the table and to execute the {@link RowChangeCallback}s.
+     * Defaults to a single daemon threaded executor that is exclusively used for this {@link
+     * SpannerTableTailer}.
+     */
     public Builder setExecutor(ScheduledExecutorService executor) {
       this.executor = Preconditions.checkNotNull(executor);
       return this;
     }
 
+    /** Creates the {@link SpannerTableTailer}. */
     public SpannerTableTailer build() {
       return new SpannerTableTailer(this);
     }
