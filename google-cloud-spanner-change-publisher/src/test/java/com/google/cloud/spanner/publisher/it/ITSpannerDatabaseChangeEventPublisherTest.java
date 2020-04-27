@@ -144,7 +144,6 @@ public class ITSpannerDatabaseChangeEventPublisherTest {
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
                     .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
-                    .setCreateTableIfNotExists()
                     .build())
             .build();
     SpannerDatabaseChangeEventPublisher eventPublisher =

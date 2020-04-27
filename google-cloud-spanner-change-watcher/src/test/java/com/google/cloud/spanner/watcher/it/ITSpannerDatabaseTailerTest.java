@@ -81,7 +81,6 @@ public class ITSpannerDatabaseTailerTest {
             .setPollInterval(Duration.ofMillis(10L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
-                    .setCreateTableIfNotExists()
                     .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
                     .build())
             .build();

@@ -34,17 +34,17 @@ import java.util.concurrent.ScheduledExecutorService;
 import org.threeten.bp.Duration;
 
 /** Samples for spanner-change-watcher. */
-class Samples {
+public class Samples {
 
   /** Watch a single table in a database for changes. */
-  static void watchSingleTableExample() throws InterruptedException {
-    String instance = "my-instance";
-    String database = "my-database";
-    String table = "MY_TABLE";
-
-    Spanner spanner = SpannerOptions.getDefaultInstance().getService();
-    TableId tableId =
-        TableId.of(DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database), table);
+  public static void watchSingleTableExample(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String table // "MY_TABLE"
+      ) throws InterruptedException {
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    TableId tableId = TableId.of(DatabaseId.of(project, instance, database), table);
     final CountDownLatch latch = new CountDownLatch(3);
     SpannerTableChangeWatcher watcher = SpannerTableTailer.newBuilder(spanner, tableId).build();
     watcher.addCallback(
@@ -57,6 +57,7 @@ class Samples {
           }
         });
     watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
@@ -64,12 +65,14 @@ class Samples {
   }
 
   /** Watch all tables in a database for changes. */
-  static void watchAllTablesExample() throws InterruptedException {
-    String instance = "my-instance";
-    String database = "my-database";
+  public static void watchAllTablesExample(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database // "my-database"
+      ) throws InterruptedException {
 
-    Spanner spanner = SpannerOptions.getDefaultInstance().getService();
-    DatabaseId databaseId = DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database);
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    DatabaseId databaseId = DatabaseId.of(project, instance, database);
     final CountDownLatch latch = new CountDownLatch(3);
     SpannerDatabaseChangeWatcher watcher =
         SpannerDatabaseTailer.newBuilder(spanner, databaseId).allTables().build();
@@ -83,6 +86,7 @@ class Samples {
           }
         });
     watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
@@ -90,20 +94,18 @@ class Samples {
   }
 
   /** Watch a set of tables in a database for changes. */
-  static void watchSetOfTablesExample() throws InterruptedException {
-    String instance = "my-instance";
-    String database = "my-database";
-    String table1 = "MY_TABLE1";
-    String table2 = "MY_TABLE2";
-    String table3 = "MY_TABLE3";
+  public static void watchSetOfTablesExample(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String... tables // {"MY_TABLE1", "MY_TABLE2"}
+      ) throws InterruptedException {
 
-    Spanner spanner = SpannerOptions.getDefaultInstance().getService();
-    DatabaseId databaseId = DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database);
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    DatabaseId databaseId = DatabaseId.of(project, instance, database);
     final CountDownLatch latch = new CountDownLatch(3);
     SpannerDatabaseChangeWatcher watcher =
-        SpannerDatabaseTailer.newBuilder(spanner, databaseId)
-            .includeTables(table1, table2, table3)
-            .build();
+        SpannerDatabaseTailer.newBuilder(spanner, databaseId).includeTables(tables).build();
     watcher.addCallback(
         new RowChangeCallback() {
           @Override
@@ -114,6 +116,7 @@ class Samples {
           }
         });
     watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
@@ -121,20 +124,20 @@ class Samples {
   }
 
   /** Watch all except some tables in a database for changes. */
-  static void watchAllExceptOfSomeTablesExample() throws InterruptedException {
-    String instance = "my-instance";
-    String database = "my-database";
-    String excludeTable1 = "MY_TABLE1";
-    String excludeTable2 = "MY_TABLE2";
-    String excludeTable3 = "MY_TABLE3";
+  public static void watchAllExceptOfSomeTablesExample(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String... excludedTables)
+      throws InterruptedException {
 
-    Spanner spanner = SpannerOptions.getDefaultInstance().getService();
-    DatabaseId databaseId = DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database);
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    DatabaseId databaseId = DatabaseId.of(project, instance, database);
     final CountDownLatch latch = new CountDownLatch(3);
     SpannerDatabaseChangeWatcher watcher =
         SpannerDatabaseTailer.newBuilder(spanner, databaseId)
             .allTables()
-            .excludeTables(excludeTable1, excludeTable2, excludeTable3)
+            .excludeTables(excludedTables)
             .build();
     watcher.addCallback(
         new RowChangeCallback() {
@@ -146,6 +149,7 @@ class Samples {
           }
         });
     watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
@@ -153,14 +157,14 @@ class Samples {
   }
 
   /** Watch a single table for changes with a very low poll interval. */
-  static void watchTableWithSpecificPollInterval() throws InterruptedException {
-    String instance = "my-instance";
-    String database = "my-database";
-    String table = "MY_TABLE";
-
-    Spanner spanner = SpannerOptions.getDefaultInstance().getService();
-    TableId tableId =
-        TableId.of(DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database), table);
+  public static void watchTableWithSpecificPollInterval(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String table // "MY_TABLE"
+      ) throws InterruptedException {
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    TableId tableId = TableId.of(DatabaseId.of(project, instance, database), table);
     final CountDownLatch latch = new CountDownLatch(3);
     // Poll the table every 10 milliseconds.
     SpannerTableChangeWatcher watcher =
@@ -177,6 +181,7 @@ class Samples {
           }
         });
     watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
@@ -187,12 +192,13 @@ class Samples {
    * Change watchers implement the {@link ApiService} interface and allows users to be notified if a
    * watcher fails.
    */
-  static void errorHandling() throws InterruptedException {
-    String instance = "my-instance";
-    String database = "my-database";
-
-    Spanner spanner = SpannerOptions.getDefaultInstance().getService();
-    DatabaseId databaseId = DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database);
+  public static void errorHandling(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database // "my-database"
+      ) throws InterruptedException {
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    DatabaseId databaseId = DatabaseId.of(project, instance, database);
     final CountDownLatch latch = new CountDownLatch(3);
     SpannerDatabaseChangeWatcher watcher =
         SpannerDatabaseTailer.newBuilder(spanner, databaseId).allTables().build();
@@ -215,15 +221,16 @@ class Samples {
             System.err.printf(
                 "Database change watcher failed.%n    State before failure: %s%n    Error: %s%n",
                 from, failure.getMessage());
-            System.exit(1);
+            try {
+              System.exit(1);
+            } catch (SecurityException e) {
+              System.err.println("System.exit(1) not allowed by SecurityManager");
+            }
           }
         },
         MoreExecutors.directExecutor());
     watcher.startAsync().awaitRunning();
-    // Wait until we have received 3 changes.
-    latch.await();
-    // Stop the poller and wait for it to release all resources.
-    watcher.stopAsync().awaitTerminated();
+    System.out.println("Started change watcher");
   }
 
   /**
@@ -231,18 +238,17 @@ class Samples {
    * database as the table that is being watched. A user may also specify a custom table name to use
    * or even a table in a different database.
    */
-  static void customCommitTimestampRepository() throws InterruptedException {
-    String instance = "my-instance";
-    String database = "my-database";
-    String table = "MY_TABLE";
-    String commitTimestampDatabase = "my-commit-timestamp-db";
-    String commitTimestampsTable = "MY_LAST_SEEN_COMMIT_TIMESTAMPS";
-
-    Spanner spanner = SpannerOptions.getDefaultInstance().getService();
-    TableId tableId =
-        TableId.of(DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database), table);
-    DatabaseId commitTimestampDbId =
-        DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, commitTimestampDatabase);
+  public static void customCommitTimestampRepository(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String table, // "MY_TABLE"
+      String commitTimestampsDatabase, // "my-commit-timestamp-db"
+      String commitTimestampsTable // "MY_LAST_SEEN_COMMIT_TIMESTAMPS"
+      ) throws InterruptedException {
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    TableId tableId = TableId.of(DatabaseId.of(project, instance, database), table);
+    DatabaseId commitTimestampDbId = DatabaseId.of(project, instance, commitTimestampsDatabase);
     final CountDownLatch latch = new CountDownLatch(3);
     SpannerTableChangeWatcher watcher =
         SpannerTableTailer.newBuilder(spanner, tableId)
@@ -252,7 +258,7 @@ class Samples {
                 SpannerCommitTimestampRepository.newBuilder(spanner, commitTimestampDbId)
                     .setCommitTimestampsTable(commitTimestampsTable)
                     // Create the table if it does not already exist.
-                    .setCreateTableIfNotExists()
+                    .setCreateTableIfNotExists(true)
                     .build())
             .build();
     watcher.addCallback(
@@ -265,6 +271,7 @@ class Samples {
           }
         });
     watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
@@ -277,14 +284,14 @@ class Samples {
    * the last seen commit timestamp should be stored. This could also be an in-memory data store if
    * the watcher only needs to report changes that occur while the watcher is running.
    */
-  static void inMemCommitTimestampRepository() throws InterruptedException {
-    String instance = "my-instance";
-    String database = "my-database";
-    String table = "MY_TABLE";
-
-    Spanner spanner = SpannerOptions.getDefaultInstance().getService();
-    TableId tableId =
-        TableId.of(DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database), table);
+  public static void inMemCommitTimestampRepository(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String table // "MY_TABLE"
+      ) throws InterruptedException {
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    TableId tableId = TableId.of(DatabaseId.of(project, instance, database), table);
     final CountDownLatch latch = new CountDownLatch(3);
     SpannerTableChangeWatcher watcher =
         SpannerTableTailer.newBuilder(spanner, tableId)
@@ -317,6 +324,7 @@ class Samples {
           }
         });
     watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
@@ -324,10 +332,11 @@ class Samples {
   }
 
   /** Use a custom executor for the change watcher. */
-  static void customExecutorExample() throws InterruptedException {
-    String instance = "my-instance";
-    String database = "my-database";
-
+  public static void customExecutorExample(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database // "my-database"
+      ) throws InterruptedException {
     Spanner spanner = SpannerOptions.getDefaultInstance().getService();
     DatabaseId databaseId = DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database);
     final CountDownLatch latch = new CountDownLatch(3);
@@ -353,12 +362,13 @@ class Samples {
           }
         });
     watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.
     watcher.stopAsync().awaitTerminated();
     // An executor that is passed in to the change watcher is not managed by the watcher and must be
-    // shutdown by the calling code.
+    // shutdown by the owner.
     executor.shutdown();
   }
 }

@@ -100,7 +100,7 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
   public static class Builder {
     private final Spanner spanner;
     private final DatabaseId databaseId;
-    private boolean createTableIfNotExists = false;
+    private boolean createTableIfNotExists = true;
     private String commitTimestampsCatalog = DEFAULT_TABLE_CATALOG;
     private String commitTimestampsSchema = DEFAULT_TABLE_SCHEMA;
     private String commitTimestampsTable = DEFAULT_TABLE_NAME;
@@ -118,10 +118,10 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
 
     /**
      * Instructs the {@link SpannerCommitTimestampRepository} to automatically create the required
-     * LAST_SEEN_COMMIT_TIMESTAMPS table. Defaults to false.
+     * LAST_SEEN_COMMIT_TIMESTAMPS table. Defaults to true.
      */
-    public Builder setCreateTableIfNotExists() {
-      this.createTableIfNotExists = true;
+    public Builder setCreateTableIfNotExists(boolean create) {
+      this.createTableIfNotExists = create;
       return this;
     }
 
@@ -231,6 +231,8 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
       if (!rs.next()) {
         if (createTableIfNotExists) {
           createTable();
+          initialized = true;
+          return;
         } else {
           throw SpannerExceptionFactory.newSpannerException(
               ErrorCode.NOT_FOUND, String.format("Table %s not found", commitTimestampsTable));
