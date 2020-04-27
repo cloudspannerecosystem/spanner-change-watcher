@@ -55,10 +55,6 @@ public final class SpannerTestHelper {
       databases.add(database);
       return database;
     }
-
-    String getInstanceId() {
-      return instanceId;
-    }
   }
 
   private static final String INSTANCE_ID_FORMAT = "scw-test-instance-%08d";
@@ -68,10 +64,6 @@ public final class SpannerTestHelper {
   private static final String SPANNER_PROJECT_ID =
       System.getProperty("spanner.project", ServiceOptions.getDefaultProjectId());
   private static final String SPANNER_CREDENTIALS_FILE = System.getProperty("spanner.credentials");
-
-  static String getProjectId() {
-    return SPANNER_PROJECT_ID;
-  }
 
   public static void setupSpanner(ITSpannerEnv env) throws Exception {
     env.spanner =
