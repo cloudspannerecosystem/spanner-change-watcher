@@ -28,8 +28,10 @@ import com.google.cloud.pubsub.v1.Publisher;
 import com.google.cloud.pubsub.v1.stub.PublisherStubSettings;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.NoOpListener;
+import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishListener;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishRowChangeCallback;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
+import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -46,10 +48,12 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Publishes change events from a Spanner database to PubSub topics.
+ * Publishes change events from a Spanner database to one or more Pubsub topics.
  *
- * <p>The changes to the tables are emitted from a {@link SpannerDatabaseChangeWatcher} and then
- * sent to Pub/Sub by this event publisher.
+ * <p>The data changes to the tables are emitted from a {@link SpannerDatabaseChangeWatcher} and
+ * then sent to Pubsub by this event publisher. The publisher can be configured to publish change
+ * events from each table to a separate topic, or to publish all changes to a single topic. Each
+ * change event contains the {@link TableId}, the new row data and the commit timestamp.
  */
 public class SpannerDatabaseChangeEventPublisher extends AbstractApiService implements ApiService {
   private static final Logger logger =
@@ -60,6 +64,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
     private final DatabaseClient client;
     private String topicNameFormat;
     private ExecutorService startStopExecutor;
+    private PublishListener listener = new NoOpListener();
     private Credentials credentials;
     private String endpoint = PublisherStubSettings.getDefaultEndpoint();
     private boolean usePlainText;
@@ -70,26 +75,62 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
     }
 
     /**
+     * Sets a {@link PublishListener} for the {@link SpannerDatabaseChangeEventPublisher}. This
+     * listener will receive a callback for each message that is published to Pubsub. This can be
+     * used for monitoring and logging purposes, but is not required for publishing changes to
+     * Pubsub.
+     */
+    public Builder setListener(PublishListener publishListener) {
+      this.listener = Preconditions.checkNotNull(publishListener);
+      return this;
+    }
+
+    /**
      * Sets the format of the names of the topics where the events should be published. The name
      * format should be in the form 'projects/<project-id>/topics/<topic-id>', where <topic-id> may
-     * contain the string %table%, which will be replaced with the actual table name.
+     * contain a number of place holders for the name of the database and table that caused the
+     * event. These place holders will be replaced by the actual database name and/or table name.
+     *
+     * <p>Possible place holders are:
+     *
+     * <ul>
+     *   <li>%project%}: The project id of the Cloud Spanner database.
+     *   <li>%instance%: The instance id of the Cloud Spanner database.
+     *   <li>%database%: The database id of the Cloud Spanner database.
+     *   <li>%catalog%: The catalog name of the Cloud Spanner table.
+     *   <li>%schema%: The schema name of the Cloud Spanner table.
+     *   <li>%table%: The table name of the Cloud Spanner table.
+     * </ul>
      */
     public Builder setTopicNameFormat(String topicNameFormat) {
       this.topicNameFormat = Preconditions.checkNotNull(topicNameFormat);
       return this;
     }
 
+    /**
+     * The {@link SpannerDatabaseChangeEventPublisher} needs to perform a number of administrative
+     * tasks during startup and shutdown, and will use this executor for those tasks. The default
+     * will use a cached thread pool executor.
+     */
     public Builder setStartStopExecutor(ExecutorService executor) {
       this.startStopExecutor = executor;
       return this;
     }
 
+    /**
+     * Set a custom endpoint for Pubsub. Can be used for testing against a local mock server or
+     * emulator.
+     */
     @VisibleForTesting
     Builder setEndpoint(String endpoint) {
       this.endpoint = Preconditions.checkNotNull(endpoint);
       return this;
     }
 
+    /**
+     * Use a plain text connection in combination with a custom endpoint. Can be used for testing
+     * against a locak mock server or emulator.
+     */
     @VisibleForTesting
     Builder usePlainText() {
       this.usePlainText = true;
@@ -105,11 +146,23 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
       return this;
     }
 
+    /** Creates the {@link SpannerDatabaseChangeEventPublisher}. */
     public SpannerDatabaseChangeEventPublisher build() throws IOException {
       return new SpannerDatabaseChangeEventPublisher(this);
     }
   }
 
+  /**
+   * Creates a {@link Builder} for a {@link SpannerDatabaseChangeEventPublisher}.
+   *
+   * @param watcher A {@link SpannerDatabaseChangeWatcher} for the tables that this publisher should
+   *     publish the change events for. The {@link SpannerDatabaseChangeWatcher} will be managed by
+   *     this publisher, and should not be started or stopped manually. It is ok to add additional
+   *     {@link RowChangeCallback} to the watcher.
+   * @param client A {@link DatabaseClient} for the database that is being watched for changes. The
+   *     publisher uses this client to query the database for information on the data types and
+   *     primary key of the tables that are being watched.
+   */
   public static Builder newBuilder(SpannerDatabaseChangeWatcher watcher, DatabaseClient client) {
     Preconditions.checkNotNull(watcher);
     Preconditions.checkNotNull(client);
@@ -121,6 +174,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
   private final DatabaseClient client;
   private final SpannerDatabaseChangeWatcher watcher;
   private final ExecutorService startStopExecutor;
+  private final PublishListener listener;
   private final boolean isOwnedExecutor;
   private Map<TableId, Publisher> publishers;
   private Map<TableId, SpannerToAvro> converters;
@@ -133,6 +187,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
         builder.startStopExecutor == null
             ? Executors.newCachedThreadPool()
             : builder.startStopExecutor;
+    this.listener = builder.listener;
     this.isOwnedExecutor = builder.startStopExecutor == null;
   }
 
@@ -182,7 +237,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                 publishers.put(table, publisherBuilder.build());
               }
               watcher.addCallback(
-                  new PublishRowChangeCallback(new NoOpListener()) {
+                  new PublishRowChangeCallback(listener) {
                     @Override
                     Publisher getPublisher(TableId table) {
                       return publishers.get(table);
