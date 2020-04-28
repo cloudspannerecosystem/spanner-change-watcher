@@ -16,6 +16,7 @@
 
 package com.google.cloud.spanner.publisher;
 
+import com.google.api.core.InternalApi;
 import com.google.cloud.ByteArray;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.ResultSet;
@@ -53,7 +54,8 @@ import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.EncoderFactory;
 
 /** Converts schema and data from Spanner to Avro. */
-class SpannerToAvro {
+@InternalApi
+public class SpannerToAvro {
   private static final Logger logger = Logger.getLogger(SpannerToAvro.class.getName());
   private static final ByteBufAllocator alloc = PooledByteBufAllocator.DEFAULT;
   static final String SCHEMA_QUERY =
@@ -69,7 +71,8 @@ class SpannerToAvro {
   private final Statement statement;
   private final SchemaSet schemaSet;
 
-  SpannerToAvro(DatabaseClient client, TableId table) {
+  @InternalApi
+  public SpannerToAvro(DatabaseClient client, TableId table) {
     this.client = client;
     this.table = table;
     this.statement =
@@ -431,7 +434,8 @@ class SpannerToAvro {
     return SchemaSet.create(avroSchema, ImmutableMap.copyOf(spannerSchema), tsColName);
   }
 
-  ByteString makeRecord(StructReader row) {
+  @InternalApi
+  public ByteString makeRecord(StructReader row) {
     //    final ByteBuf bb = Unpooled.directBuffer();
     final ByteBuf bb = alloc.directBuffer(1024); // fix this
     final Set<String> keySet = schemaSet.spannerSchema().keySet();

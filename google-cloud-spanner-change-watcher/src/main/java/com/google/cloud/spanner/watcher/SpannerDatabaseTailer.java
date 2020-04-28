@@ -37,6 +37,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.threeten.bp.Duration;
 
 /**
@@ -66,6 +68,8 @@ import org.threeten.bp.Duration;
  */
 public class SpannerDatabaseTailer extends AbstractApiService
     implements SpannerDatabaseChangeWatcher {
+  private static final Logger logger = Logger.getLogger(SpannerDatabaseTailer.class.getName());
+
   /** Lists all tables with a commit timestamp column. */
   static final String LIST_TABLE_NAMES_STATEMENT =
       "SELECT TABLE_NAME\n"
@@ -282,6 +286,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
                 }
               }
             } catch (Throwable t) {
+              logger.log(Level.WARNING, "Failed to start watcher", t);
               notifyFailed(t);
             }
           }
@@ -338,6 +343,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
                 if (isOwnedExecutor) {
                   executor.shutdown();
                 }
+                logger.log(Level.WARNING, "Watcher failed to start", failure);
                 notifyFailed(failure);
               }
             }
@@ -353,6 +359,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
                     return;
                   }
                 }
+                logger.info("Watcher started successfully");
                 notifyStarted();
               }
             }
@@ -371,6 +378,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
                 if (isOwnedExecutor) {
                   executor.shutdown();
                 }
+                logger.info("Watcher terminated");
                 notifyStopped();
               }
             }

@@ -82,7 +82,7 @@ public class ITSpannerDatabaseChangeEventPublisherTest {
       String topic =
           String.format(
               "projects/%s/topics/spanner-update-%s-%s",
-              PubsubTestHelper.PUBSUB_PROJECT_ID, database.getId().getDatabase(), table);
+              PubsubTestHelper.getPubsubProjectId(), database.getId().getDatabase(), table);
       env.topicAdminClient.createTopic(topic);
       topics.add(topic);
       logger.info(String.format("Created topic for table %s", table));
@@ -90,7 +90,7 @@ public class ITSpannerDatabaseChangeEventPublisherTest {
       String subscription =
           String.format(
               "projects/%s/subscriptions/spanner-update-%s-%s",
-              PubsubTestHelper.PUBSUB_PROJECT_ID, database.getId().getDatabase(), table);
+              PubsubTestHelper.getPubsubProjectId(), database.getId().getDatabase(), table);
       env.subAdminClient.createSubscription(
           subscription, topic, PushConfig.getDefaultInstance(), 10);
       logger.info(String.format("Created subscription %s", subscription));
@@ -109,7 +109,7 @@ public class ITSpannerDatabaseChangeEventPublisherTest {
                     }
                   })
               .setCredentialsProvider(
-                  FixedCredentialsProvider.create(PubsubTestHelper.getPubSubCredentials()))
+                  FixedCredentialsProvider.create(PubsubTestHelper.getPubsubCredentials()))
               .build();
       subscribers[i].startAsync().awaitRunning();
       i++;
@@ -151,8 +151,8 @@ public class ITSpannerDatabaseChangeEventPublisherTest {
             .setTopicNameFormat(
                 String.format(
                     "projects/%s/topics/spanner-update-%%database%%-%%table%%",
-                    PubsubTestHelper.PUBSUB_PROJECT_ID))
-            .setCredentials(PubsubTestHelper.getPubSubCredentials())
+                    PubsubTestHelper.getPubsubProjectId()))
+            .setCredentials(PubsubTestHelper.getPubsubCredentials())
             .build();
     eventPublisher.startAsync().awaitRunning();
 

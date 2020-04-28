@@ -75,7 +75,7 @@ public class ITSpannerTableChangeEventPublisherTest {
         Subscriber.newBuilder(
                 String.format(
                     "projects/%s/subscriptions/%s",
-                    PubsubTestHelper.PUBSUB_PROJECT_ID, env.subscriptionId),
+                    PubsubTestHelper.getPubsubProjectId(), env.subscriptionId),
                 new MessageReceiver() {
                   @Override
                   public void receiveMessage(PubsubMessage message, AckReplyConsumer consumer) {
@@ -86,7 +86,7 @@ public class ITSpannerTableChangeEventPublisherTest {
                   }
                 })
             .setCredentialsProvider(
-                FixedCredentialsProvider.create(PubsubTestHelper.getPubSubCredentials()))
+                FixedCredentialsProvider.create(PubsubTestHelper.getPubsubCredentials()))
             .build();
     subscriber.startAsync().awaitRunning();
   }
@@ -115,8 +115,8 @@ public class ITSpannerTableChangeEventPublisherTest {
         SpannerTableChangeEventPublisher.newBuilder(watcher, client)
             .setTopicName(
                 String.format(
-                    "projects/%s/topics/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, env.topicId))
-            .setCredentials(PubsubTestHelper.getPubSubCredentials())
+                    "projects/%s/topics/%s", PubsubTestHelper.getPubsubProjectId(), env.topicId))
+            .setCredentials(PubsubTestHelper.getPubsubCredentials())
             .build();
     eventPublisher.startAsync().awaitRunning();
 

@@ -172,11 +172,13 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
 
   @Override
   protected void doStart() {
+    logger.info("Starting watcher");
     ApiFuture<String> commitTimestampColFut = SpannerUtils.getTimestampColumn(client, table);
     commitTimestampColFut.addListener(
         new Runnable() {
           @Override
           public void run() {
+            logger.info("Initializing poll statement");
             try {
               lastSeenCommitTimestamp = commitTimestampRepository.get(table);
               commitTimestampColumn = Futures.getUnchecked(commitTimestampColFut);
@@ -187,6 +189,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                           table.getSqlIdentifier(),
                           commitTimestampColumn,
                           commitTimestampColumn));
+              logger.info("Watcher started");
               notifyStarted();
               scheduled = executor.schedule(new SpannerTailerRunner(), 0L, TimeUnit.MILLISECONDS);
             } catch (Throwable t) {
