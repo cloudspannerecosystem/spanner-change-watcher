@@ -295,9 +295,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
                       FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel)));
                   publisherBuilder.setCredentialsProvider(NoCredentialsProvider.create());
                 }
-                System.err.println("Building publisher");
                 publisher = publisherBuilder.build();
-                System.err.println("Finished building publisher");
               }
               watcher.addListener(
                   new Listener() {
@@ -326,7 +324,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
 
                     @Override
                     void onFailure(TableId table, Timestamp commitTimestamp, Throwable t) {
-                      watcher.stopAsync();
+                      stopDependencies(false);
                       notifyFailed(t);
                     }
                   });
@@ -340,6 +338,11 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
 
   @Override
   public void doStop() {
+    logger.log(Level.FINE, "Stopping event publisher");
+    stopDependencies(true);
+  }
+
+  private void stopDependencies(boolean notify) {
     startStopExecutor.execute(
         new Runnable() {
           @Override
@@ -347,9 +350,13 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
             try {
               watcher.stopAsync().awaitTerminated();
               publisher.shutdown();
-              notifyStopped();
+              if (notify) {
+                notifyStopped();
+              }
             } catch (Throwable t) {
-              notifyFailed(t);
+              if (notify) {
+                notifyFailed(t);
+              }
             }
           }
         });

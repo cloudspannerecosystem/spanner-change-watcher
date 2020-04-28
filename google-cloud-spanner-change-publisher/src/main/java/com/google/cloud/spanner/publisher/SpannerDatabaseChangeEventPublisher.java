@@ -197,7 +197,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
           @Override
           public void failed(State from, Throwable failure) {
             logger.log(Level.WARNING, "Publisher failed", failure);
-            stopDependencies();
+            stopDependencies(false);
           }
         },
         MoreExecutors.directExecutor());
@@ -205,12 +205,11 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
 
   @Override
   protected void doStart() {
-    logger.log(Level.INFO, "Starting event publisher");
+    logger.log(Level.FINE, "Starting event publisher");
     startStopExecutor.execute(
         new Runnable() {
           @Override
           public void run() {
-            logger.info("Starting event publisher initialization");
             try {
               publishers = new HashMap<>(watcher.getTables().size());
               converters = new HashMap<>(watcher.getTables().size());
@@ -247,9 +246,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                       FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel)));
                   publisherBuilder.setCredentialsProvider(NoCredentialsProvider.create());
                 }
-                System.err.println("Building publisher");
                 publishers.put(table, publisherBuilder.build());
-                System.err.println("Finished building publisher");
               }
               watcher.addListener(
                   new Listener() {
@@ -261,7 +258,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
 
                     @Override
                     public void running() {
-                      logger.info("Watcher started successfully");
+                      logger.log(Level.FINE, "Watcher started successfully");
                       notifyStarted();
                     }
                   },
@@ -298,10 +295,10 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
   @Override
   protected void doStop() {
     logger.log(Level.FINE, "Stopping event publisher");
-    stopDependencies();
+    stopDependencies(true);
   }
 
-  private void stopDependencies() {
+  private void stopDependencies(boolean notify) {
     watcher.addListener(
         new Listener() {
           @Override
@@ -317,9 +314,13 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                   Thread.currentThread().interrupt();
                 }
               }
-              notifyStopped();
+              if (notify) {
+                notifyStopped();
+              }
             } catch (Throwable t) {
-              notifyFailed(t);
+              if (notify) {
+                notifyFailed(t);
+              }
             } finally {
               if (isOwnedExecutor) {
                 startStopExecutor.shutdown();

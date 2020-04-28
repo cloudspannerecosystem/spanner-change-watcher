@@ -359,7 +359,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
                     return;
                   }
                 }
-                logger.info("Watcher started successfully");
+                logger.log(Level.FINE, "Watcher started successfully");
                 notifyStarted();
               }
             }
@@ -378,7 +378,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
                 if (isOwnedExecutor) {
                   executor.shutdown();
                 }
-                logger.info("Watcher terminated");
+                logger.log(Level.FINE, "Watcher terminated");
                 notifyStopped();
               }
             }
