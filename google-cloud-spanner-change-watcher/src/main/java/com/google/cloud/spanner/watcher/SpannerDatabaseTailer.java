@@ -71,6 +71,66 @@ public class SpannerDatabaseTailer extends AbstractApiService
     implements SpannerDatabaseChangeWatcher {
   private static final Logger logger = Logger.getLogger(SpannerDatabaseTailer.class.getName());
 
+  /** Builder for a {@link SpannerDatabaseTailer}. */
+  public interface Builder {
+    /**
+     * Sets a specific {@link CommitTimestampRepository} to use for the {@link
+     * SpannerDatabaseTailer}.
+     *
+     * <p>The default will use a {@link SpannerCommitTimestampRepository} which stores the last seen
+     * commit timestamp in a table named LAST_SEEN_COMMIT_TIMESTAMPS in the Spanner database that
+     * this {@link SpannerDatabaseTailer} is monitoring. The table will be created if it does not
+     * already exist.
+     */
+    public Builder setCommitTimestampRepository(CommitTimestampRepository repository);
+
+    /**
+     * Sets the poll interval to use for this {@link SpannerDatabaseTailer}. The default is 1
+     * second.
+     */
+    public Builder setPollInterval(Duration interval);
+
+    /**
+     * Sets a specific {@link ScheduledExecutorService} to use for this {@link
+     * SpannerDatabaseTailer}. This executor will be used to execute the poll queries on the tables
+     * and to call the {@link RowChangeCallback}s. The default will use a {@link
+     * ScheduledThreadPoolExecutor} with a core size equal to the number of tables that is being
+     * monitored.
+     */
+    public Builder setExecutor(ScheduledExecutorService executor);
+
+    /** Creates a {@link SpannerDatabaseTailer} from this builder. */
+    public SpannerDatabaseTailer build();
+  }
+
+  /**
+   * Interface for selecting the tables that should be monitored by a {@link SpannerDatabaseTailer}.
+   */
+  public interface TableSelecter {
+    /**
+     * Instructs the {@link SpannerDatabaseTailer} to only emit changes for these specific tables.
+     */
+    Builder includeTables(String firstTable, String... furtherTables);
+
+    /**
+     * Instructs the {@link SpannerDatabaseTailer} to emit change events for all tables in the
+     * database that have a column with option ALLOW_COMMIT_TIMESTAMP=TRUE. Tables that don't have a
+     * commit timestamp column are automatically ignored. Additional tables can be excluded by
+     * calling {@link TableExcluder#except(String...)}.
+     */
+    TableExcluder allTables();
+  }
+
+  /** Interface for excluding specific tables from a {@link SpannerDatabaseTailer}. */
+  public interface TableExcluder extends Builder {
+    /**
+     * Instructs the {@link SpannerDatabaseTailer} to exclude these tables from change events. This
+     * option can be used in combination with {@link TableSelecter#allTables()} to include all
+     * tables except for a specfic list.
+     */
+    Builder except(String... tables);
+  }
+
   /** Lists all tables with a commit timestamp column. */
   static final String LIST_TABLE_NAMES_STATEMENT =
       "SELECT TABLE_NAME\n"
@@ -81,8 +141,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
           + "AND TABLE_SCHEMA = @schema\n"
           + "AND TABLE_NAME IN (SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMN_OPTIONS WHERE OPTION_NAME='allow_commit_timestamp' AND OPTION_VALUE='TRUE')";
 
-  /** Builder for a {@link SpannerDatabaseTailer}. */
-  public static class Builder {
+  static class BuilderImpl implements TableSelecter, TableExcluder, Builder {
     private final Spanner spanner;
     private final DatabaseId databaseId;
     private String catalog = "";
@@ -94,44 +153,33 @@ public class SpannerDatabaseTailer extends AbstractApiService
     private Duration pollInterval = Duration.ofSeconds(1L);
     private ScheduledExecutorService executor;
 
-    private Builder(Spanner spanner, DatabaseId databaseId) {
+    private BuilderImpl(Spanner spanner, DatabaseId databaseId) {
       this.spanner = Preconditions.checkNotNull(spanner);
       this.databaseId = Preconditions.checkNotNull(databaseId);
       this.commitTimestampRepository =
           SpannerCommitTimestampRepository.newBuilder(spanner, databaseId).build();
     }
 
-    /**
-     * Instructs the {@link SpannerDatabaseTailer} to emit change events for all tables in the
-     * database that have a column with option ALLOW_COMMIT_TIMESTAMP=TRUE. Tables that don't have a
-     * commit timestamp column are automatically ignored. Additional tables can be excluded by
-     * calling {@link #excludeTables(String...)}.
-     */
-    public Builder allTables() {
+    @Override
+    public TableExcluder allTables() {
       Preconditions.checkState(
           includedTables.isEmpty(), "Cannot include specific tables in combination with allTables");
       this.allTables = true;
       return this;
     }
 
-    /**
-     * Instructs the {@link SpannerDatabaseTailer} to only emit changes for these specific tables.
-     * This option cannot be used in combination with {@link #allTables()}. If you both exclude and
-     * include the same table, the exclusion will get priority and the table will not be included.
-     */
-    public Builder includeTables(String... tables) {
+    @Override
+    public Builder includeTables(String firstTable, String... otherTables) {
+      Preconditions.checkNotNull(firstTable);
       Preconditions.checkState(
           !allTables, "Cannot include specific tables in combination with allTables");
-      includedTables.addAll(Arrays.asList(tables));
+      includedTables.add(firstTable);
+      includedTables.addAll(Arrays.asList(otherTables));
       return this;
     }
 
-    /**
-     * Instructs the {@link SpannerDatabaseTailer} to exclude these tables from change events. This
-     * option can be used in combination with {@link #allTables()} to include all tables except for
-     * a specfic list.
-     */
-    public Builder excludeTables(String... excludedTables) {
+    @Override
+    public Builder except(String... excludedTables) {
       this.excludedTables.addAll(Arrays.asList(excludedTables));
       return this;
     }
@@ -145,6 +193,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
      * this {@link SpannerDatabaseTailer} is monitoring. The table will be created if it does not
      * already exist.
      */
+    @Override
     public Builder setCommitTimestampRepository(CommitTimestampRepository repository) {
       this.commitTimestampRepository = Preconditions.checkNotNull(repository);
       return this;
@@ -154,6 +203,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
      * Sets the poll interval to use for this {@link SpannerDatabaseTailer}. The default is 1
      * second.
      */
+    @Override
     public Builder setPollInterval(Duration interval) {
       this.pollInterval = Preconditions.checkNotNull(interval);
       return this;
@@ -166,24 +216,25 @@ public class SpannerDatabaseTailer extends AbstractApiService
      * ScheduledThreadPoolExecutor} with a core size equal to the number of tables that is being
      * monitored.
      */
+    @Override
     public Builder setExecutor(ScheduledExecutorService executor) {
       this.executor = Preconditions.checkNotNull(executor);
       return this;
     }
 
     /** Creates a {@link SpannerDatabaseTailer} from this builder. */
+    @Override
     public SpannerDatabaseTailer build() {
       return new SpannerDatabaseTailer(this);
     }
   }
 
   /** Creates a builder for a {@link SpannerDatabaseTailer}. */
-  public static Builder newBuilder(Spanner spanner, DatabaseId databaseId) {
-    return new Builder(spanner, databaseId);
+  public static TableSelecter newBuilder(Spanner spanner, DatabaseId databaseId) {
+    return new BuilderImpl(spanner, databaseId);
   }
 
   private final Object lock = new Object();
-  private final Builder builder;
   private final Spanner spanner;
   private final DatabaseId databaseId;
   private final String catalog;
@@ -191,14 +242,15 @@ public class SpannerDatabaseTailer extends AbstractApiService
   private final boolean allTables;
   private final ImmutableList<String> includedTables;
   private final ImmutableList<String> excludedTables;
-  private ScheduledExecutorService executor;
-  private boolean isOwnedExecutor;
+  private final CommitTimestampRepository commitTimestampRepository;
+  private final Duration pollInterval;
+  private final ScheduledExecutorService executor;
+  private final boolean isOwnedExecutor;
   private ImmutableList<TableId> tables;
   private Map<TableId, SpannerTableChangeWatcher> watchers;
   private final List<RowChangeCallback> callbacks = new LinkedList<>();
 
-  private SpannerDatabaseTailer(Builder builder) {
-    this.builder = builder;
+  private SpannerDatabaseTailer(BuilderImpl builder) {
     this.spanner = builder.spanner;
     this.databaseId = builder.databaseId;
     this.catalog = builder.catalog;
@@ -206,10 +258,13 @@ public class SpannerDatabaseTailer extends AbstractApiService
     this.allTables = builder.allTables;
     this.includedTables = ImmutableList.copyOf(builder.includedTables);
     this.excludedTables = ImmutableList.copyOf(builder.excludedTables);
+    this.commitTimestampRepository = builder.commitTimestampRepository;
+    this.pollInterval = builder.pollInterval;
     if (builder.executor == null) {
       isOwnedExecutor = true;
       executor = new ScheduledThreadPoolExecutor(1);
     } else {
+      isOwnedExecutor = false;
       executor = builder.executor;
     }
   }
@@ -245,7 +300,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
     // Check that all tables that were explicitly included were returned by allTableNames
     // and are valid to use with this tailer, i.e. they have a column containing a commit
     // timestamp.
-    for (String includedTable : builder.includedTables) {
+    for (String includedTable : includedTables) {
       if (!tables.contains(
           TableId.newBuilder(databaseId, includedTable)
               .setCatalog(catalog)
@@ -275,7 +330,13 @@ public class SpannerDatabaseTailer extends AbstractApiService
           public void run() {
             try {
               ImmutableList<TableId> tables = getTables();
-              if (isOwnedExecutor && !tables.isEmpty()) {
+              if (tables.isEmpty()) {
+                throw SpannerExceptionFactory.newSpannerException(
+                    ErrorCode.NOT_FOUND,
+                    String.format(
+                        "No suitable tables found for watcher for database %s", databaseId));
+              }
+              if (isOwnedExecutor) {
                 ((ScheduledThreadPoolExecutor) executor).setCorePoolSize(tables.size());
               }
               synchronized (lock) {
@@ -325,8 +386,8 @@ public class SpannerDatabaseTailer extends AbstractApiService
     for (TableId table : tables) {
       SpannerTableTailer watcher =
           SpannerTableTailer.newBuilder(spanner, table)
-              .setCommitTimestampRepository(builder.commitTimestampRepository)
-              .setPollInterval(builder.pollInterval)
+              .setCommitTimestampRepository(commitTimestampRepository)
+              .setPollInterval(pollInterval)
               .setExecutor(executor)
               .build();
       for (RowChangeCallback callback : callbacks) {

@@ -98,14 +98,15 @@ public class Samples {
       String project, // "my-project"
       String instance, // "my-instance"
       String database, // "my-database"
-      String... tables // {"MY_TABLE1", "MY_TABLE2"}
+      String table1, // "MY_TABLE1"
+      String table2 // "MY_TABLE2"
       ) throws InterruptedException {
 
     Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
     DatabaseId databaseId = DatabaseId.of(project, instance, database);
     final CountDownLatch latch = new CountDownLatch(3);
     SpannerDatabaseChangeWatcher watcher =
-        SpannerDatabaseTailer.newBuilder(spanner, databaseId).includeTables(tables).build();
+        SpannerDatabaseTailer.newBuilder(spanner, databaseId).includeTables(table1, table2).build();
     watcher.addCallback(
         new RowChangeCallback() {
           @Override
@@ -137,7 +138,7 @@ public class Samples {
     SpannerDatabaseChangeWatcher watcher =
         SpannerDatabaseTailer.newBuilder(spanner, databaseId)
             .allTables()
-            .excludeTables(excludedTables)
+            .except(excludedTables)
             .build();
     watcher.addCallback(
         new RowChangeCallback() {
