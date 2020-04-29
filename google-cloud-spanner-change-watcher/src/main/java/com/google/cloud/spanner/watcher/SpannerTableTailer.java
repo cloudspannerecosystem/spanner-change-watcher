@@ -26,6 +26,7 @@ import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
+import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -172,13 +173,13 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
 
   @Override
   protected void doStart() {
-    logger.info("Starting watcher");
+    logger.log(Level.INFO, "Starting watcher for table {0}", table);
     ApiFuture<String> commitTimestampColFut = SpannerUtils.getTimestampColumn(client, table);
     commitTimestampColFut.addListener(
         new Runnable() {
           @Override
           public void run() {
-            logger.info("Initializing poll statement");
+            logger.log(Level.INFO, "Initializing poll statement for table {0}", table);
             try {
               lastSeenCommitTimestamp = commitTimestampRepository.get(table);
               commitTimestampColumn = Futures.getUnchecked(commitTimestampColFut);
@@ -189,7 +190,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                           table.getSqlIdentifier(),
                           commitTimestampColumn,
                           commitTimestampColumn));
-              logger.info("Watcher started");
+              logger.log(Level.INFO, "Watcher started for table {0}", table);
               notifyStarted();
               scheduled = executor.schedule(new SpannerTailerRunner(), 0L, TimeUnit.MILLISECONDS);
             } catch (Throwable t) {
@@ -293,7 +294,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
           }
         }
       } catch (Throwable t) {
-        logger.log(Level.WARNING, "Error processing change set", t);
+        logger.log(
+            LogRecordBuilder.of(
+                Level.WARNING, "Error processing change set for table {0}", table, t));
         notifyFailed(t);
         scheduleNextPollOrStop();
         return CallbackResponse.DONE;

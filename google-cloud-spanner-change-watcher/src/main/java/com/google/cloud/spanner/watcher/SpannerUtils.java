@@ -33,11 +33,34 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 
 /** Utils for getting commonly needed schema information from a Spanner database. */
 @InternalApi(
     "Public visibility for re-use by other spanner-change-watcher libraries. API-breaking changes without prior notice is possible.")
 public class SpannerUtils {
+  public static class LogRecordBuilder {
+    public static LogRecord of(Level level, String msg, Throwable thrown) {
+      LogRecord res = new LogRecord(level, msg);
+      res.setThrown(thrown);
+      return res;
+    }
+
+    public static LogRecord of(Level level, String msg, Object param, Throwable thrown) {
+      LogRecord res = new LogRecord(level, msg);
+      res.setThrown(thrown);
+      res.setParameters(new Object[] {param});
+      return res;
+    }
+
+    public static LogRecord of(Level level, String msg, Object param1, Object param2) {
+      LogRecord res = new LogRecord(level, msg);
+      res.setParameters(new Object[] {param1, param2});
+      return res;
+    }
+  }
+
   /** Query for getting the column of a table that holds the commit timestamp. */
   @VisibleForTesting
   public static final String FIND_COMMIT_TIMESTAMP_COLUMN_QUERY =

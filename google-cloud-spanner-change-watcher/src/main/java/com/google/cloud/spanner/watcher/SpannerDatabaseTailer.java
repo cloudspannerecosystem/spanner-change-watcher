@@ -26,6 +26,7 @@ import com.google.cloud.spanner.SpannerExceptionFactory;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.StructReader;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
+import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
 import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -286,7 +287,9 @@ public class SpannerDatabaseTailer extends AbstractApiService
                 }
               }
             } catch (Throwable t) {
-              logger.log(Level.WARNING, "Failed to start watcher", t);
+              logger.log(
+                  LogRecordBuilder.of(
+                      Level.WARNING, "Failed to start watcher for database {0}", databaseId, t));
               notifyFailed(t);
             }
           }
@@ -300,6 +303,11 @@ public class SpannerDatabaseTailer extends AbstractApiService
         c.stopAsync();
       }
     }
+  }
+
+  @Override
+  public DatabaseId getDatabaseId() {
+    return databaseId;
   }
 
   @Override
@@ -343,7 +351,12 @@ public class SpannerDatabaseTailer extends AbstractApiService
                 if (isOwnedExecutor) {
                   executor.shutdown();
                 }
-                logger.log(Level.WARNING, "Watcher failed to start", failure);
+                logger.log(
+                    LogRecordBuilder.of(
+                        Level.WARNING,
+                        "Watcher failed to start for database {0}",
+                        databaseId,
+                        failure));
                 notifyFailed(failure);
               }
             }
@@ -359,7 +372,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
                     return;
                   }
                 }
-                logger.log(Level.FINE, "Watcher started successfully");
+                logger.log(Level.INFO, "Watcher started successfully for database {0}", databaseId);
                 notifyStarted();
               }
             }
@@ -378,7 +391,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
                 if (isOwnedExecutor) {
                   executor.shutdown();
                 }
-                logger.log(Level.FINE, "Watcher terminated");
+                logger.log(Level.INFO, "Watcher terminated for database {0}", databaseId);
                 notifyStopped();
               }
             }

@@ -18,12 +18,20 @@ package com.google.cloud.spanner.watcher;
 
 import com.google.api.core.ApiService;
 import com.google.api.core.ApiService.State;
+import com.google.cloud.spanner.DatabaseId;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import java.util.Collection;
 
 /** Interface for capturing changes to a set of tables in a Spanner database. */
 public interface SpannerDatabaseChangeWatcher extends ApiService {
-  /** Returns the ids of the tables that are monitored by this watcher. */
+  /** Returns the id of the database that is being monitored for changes. */
+  DatabaseId getDatabaseId();
+
+  /**
+   * Returns the ids of the tables that are monitored by this watcher. This call can require the
+   * {@link SpannerDatabaseChangeWatcher} to make a round-trip to the database to determine the
+   * actual tables that are being monitored.
+   */
   Collection<TableId> getTables();
 
   /**

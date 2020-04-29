@@ -131,7 +131,7 @@ public class SpannerTableChangeEventPublisherTest extends AbstractMockServerTest
             .setTopicName("projects/p/topics/foo-updates")
             .build();
     publisher.startAsync().awaitRunning();
-    latch.await(5L, TimeUnit.SECONDS);
+    assertThat(latch.await(10L, TimeUnit.SECONDS)).isTrue();
     publisher.stopAsync();
     assertThat(receivedMessages.get()).isEqualTo(SELECT_FOO_ROW_COUNT);
     publisher.awaitTerminated();

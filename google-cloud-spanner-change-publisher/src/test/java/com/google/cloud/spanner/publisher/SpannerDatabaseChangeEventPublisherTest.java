@@ -131,7 +131,7 @@ public class SpannerDatabaseChangeEventPublisherTest extends AbstractMockServerT
             .setTopicNameFormat("projects/p/topics/%table%-updates")
             .build();
     publisher.startAsync().awaitRunning();
-    latch.await(10L, TimeUnit.SECONDS);
+    assertThat(latch.await(10L, TimeUnit.SECONDS)).isTrue();
     assertThat(receivedMessages.get()).isEqualTo(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
     publisher.stopAsync().awaitTerminated();
     subscriber.stopAsync().awaitTerminated();

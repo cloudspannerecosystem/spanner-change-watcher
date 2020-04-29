@@ -32,6 +32,7 @@ import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.Publi
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishRowChangeCallback;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
+import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -173,30 +174,41 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
     return new Builder(watcher, client);
   }
 
-  private final Builder builder;
   private final DatabaseClient client;
   private final SpannerDatabaseChangeWatcher watcher;
+  private final String topicNameFormat;
   private final ExecutorService startStopExecutor;
   private final ImmutableList<PublishListener> listeners;
   private final boolean isOwnedExecutor;
+  private final Credentials credentials;
+  private final String endpoint;
+  private final boolean usePlainText;
   private Map<TableId, Publisher> publishers;
   private Map<TableId, SpannerToAvro> converters;
 
   private SpannerDatabaseChangeEventPublisher(Builder builder) throws IOException {
-    this.builder = builder;
     this.client = builder.client;
     this.watcher = builder.watcher;
+    this.topicNameFormat = builder.topicNameFormat;
     this.startStopExecutor =
         builder.startStopExecutor == null
             ? Executors.newCachedThreadPool()
             : builder.startStopExecutor;
     this.listeners = ImmutableList.copyOf(builder.listeners);
     this.isOwnedExecutor = builder.startStopExecutor == null;
+    this.credentials = builder.credentials;
+    this.endpoint = builder.endpoint;
+    this.usePlainText = builder.usePlainText;
     this.addListener(
         new Listener() {
           @Override
           public void failed(State from, Throwable failure) {
-            logger.log(Level.WARNING, "Publisher failed", failure);
+            logger.log(
+                LogRecordBuilder.of(
+                    Level.WARNING,
+                    "Publisher for database {0} failed",
+                    watcher.getDatabaseId(),
+                    failure));
             stopDependencies(false);
           }
         },
@@ -205,7 +217,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
 
   @Override
   protected void doStart() {
-    logger.log(Level.FINE, "Starting event publisher");
+    logger.log(Level.INFO, "Starting event publisher for database {0}", watcher.getDatabaseId());
     startStopExecutor.execute(
         new Runnable() {
           @Override
@@ -216,18 +228,15 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
               for (TableId table : watcher.getTables()) {
                 // TODO: Re-use code from SpannerTableChangeEventPublisher.
                 converters.put(table, new SpannerToAvro(client, table));
-                Credentials credentials =
-                    builder.credentials == null
-                        ? GoogleCredentials.getApplicationDefault()
-                        : builder.credentials;
-                if (credentials == null) {
+                Credentials useCredentials =
+                    credentials == null ? GoogleCredentials.getApplicationDefault() : credentials;
+                if (useCredentials == null) {
                   throw new IllegalArgumentException(
                       "There is no credentials set on the builder, and the environment has no default credentials set.");
                 }
                 Publisher.Builder publisherBuilder =
                     Publisher.newBuilder(
-                            builder
-                                .topicNameFormat
+                            topicNameFormat
                                 .replace(
                                     "%project%", table.getDatabaseId().getInstanceId().getProject())
                                 .replace(
@@ -237,11 +246,11 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                                 .replace("%catalog%", table.getCatalog())
                                 .replace("%schema%", table.getSchema())
                                 .replace("%table%", table.getTable()))
-                        .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
-                        .setEndpoint(builder.endpoint);
-                if (builder.usePlainText) {
+                        .setCredentialsProvider(FixedCredentialsProvider.create(useCredentials))
+                        .setEndpoint(endpoint);
+                if (usePlainText) {
                   ManagedChannel channel =
-                      ManagedChannelBuilder.forTarget(builder.endpoint).usePlaintext().build();
+                      ManagedChannelBuilder.forTarget(endpoint).usePlaintext().build();
                   publisherBuilder.setChannelProvider(
                       FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel)));
                   publisherBuilder.setCredentialsProvider(NoCredentialsProvider.create());
@@ -252,13 +261,21 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                   new Listener() {
                     @Override
                     public void failed(State from, Throwable failure) {
-                      logger.log(Level.WARNING, "Watcher failed to start", failure);
+                      logger.log(
+                          LogRecordBuilder.of(
+                              Level.WARNING,
+                              "Watcher for database {0} failed to start",
+                              watcher.getDatabaseId(),
+                              failure));
                       notifyFailed(failure);
                     }
 
                     @Override
                     public void running() {
-                      logger.log(Level.FINE, "Watcher started successfully");
+                      logger.log(
+                          Level.INFO,
+                          "Watcher for database {0} started successfully",
+                          watcher.getDatabaseId());
                       notifyStarted();
                     }
                   },
@@ -278,9 +295,11 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                     @Override
                     void onFailure(TableId table, Timestamp commitTimestamp, Throwable t) {
                       logger.log(
-                          Level.WARNING,
-                          "Publish failed, stopping the watcher and failing the publisher",
-                          t);
+                          LogRecordBuilder.of(
+                              Level.WARNING,
+                              "Publish failed, stopping the watcher for database {0} and failing the publisher",
+                              watcher.getDatabaseId(),
+                              t));
                       notifyFailed(t);
                     }
                   });
@@ -294,7 +313,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
 
   @Override
   protected void doStop() {
-    logger.log(Level.FINE, "Stopping event publisher");
+    logger.log(Level.INFO, "Stopping event publisher for database {0}", watcher.getDatabaseId());
     stopDependencies(true);
   }
 
