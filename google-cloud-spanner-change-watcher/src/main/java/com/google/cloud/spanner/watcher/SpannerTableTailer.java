@@ -179,7 +179,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
         new Runnable() {
           @Override
           public void run() {
-            logger.log(Level.INFO, "Initializing poll statement for table {0}", table);
+            logger.log(Level.INFO, "Initializing watcher for table {0}", table);
             try {
               lastSeenCommitTimestamp = commitTimestampRepository.get(table);
               commitTimestampColumn = Futures.getUnchecked(commitTimestampColFut);
@@ -194,6 +194,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
               notifyStarted();
               scheduled = executor.schedule(new SpannerTailerRunner(), 0L, TimeUnit.MILLISECONDS);
             } catch (Throwable t) {
+              logger.log(
+                  LogRecordBuilder.of(
+                      Level.WARNING, "Could not initialize watcher for table {0}", table, t));
               notifyFailed(t);
             }
           }

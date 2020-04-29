@@ -24,6 +24,7 @@ import com.google.cloud.spanner.MockSpannerServiceImpl.StatementResult;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.Statement;
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ListValue;
 import com.google.protobuf.Value;
 import com.google.spanner.v1.ResultSet;
@@ -252,6 +253,19 @@ public abstract class AbstractMockServerTest {
           .bind("catalog")
           .to("")
           .build();
+  private static final Statement FIND_ALL_TABLES_EXCEPT_FOO_AND_BAR_STATEMENT =
+      Statement.newBuilder(SpannerDatabaseTailer.LIST_TABLE_NAMES_STATEMENT)
+          .bind("excluded")
+          .toStringArray(ImmutableList.of("Foo", "Bar"))
+          .bind("allTables")
+          .to(true)
+          .bind("included")
+          .toStringArray(Collections.<String>emptyList())
+          .bind("schema")
+          .to("")
+          .bind("catalog")
+          .to("")
+          .build();
   private static final ResultSetMetadata FIND_TABLES_METADATA =
       ResultSetMetadata.newBuilder()
           .setRowType(
@@ -275,6 +289,8 @@ public abstract class AbstractMockServerTest {
                   .build())
           .setMetadata(FIND_TABLES_METADATA)
           .build();
+  private static final com.google.spanner.v1.ResultSet FIND_ALL_TABLES_EXCEPT_FOO_AND_BAR_RESULT =
+      com.google.spanner.v1.ResultSet.newBuilder().setMetadata(FIND_TABLES_METADATA).build();
   private static final Statement FIND_FOO_BAR_NON_EXISTING_TABLE_TABLES_STATEMENT =
       Statement.newBuilder(SpannerDatabaseTailer.LIST_TABLE_NAMES_STATEMENT)
           .bind("excluded")
@@ -288,6 +304,21 @@ public abstract class AbstractMockServerTest {
           .bind("catalog")
           .to("")
           .build();
+  private static final Statement FIND_NON_EXISTING_TABLE_TABLES_STATEMENT =
+      Statement.newBuilder(SpannerDatabaseTailer.LIST_TABLE_NAMES_STATEMENT)
+          .bind("excluded")
+          .toStringArray(Collections.<String>emptyList())
+          .bind("allTables")
+          .to(false)
+          .bind("included")
+          .toStringArray(Arrays.asList("NonExistingTable"))
+          .bind("schema")
+          .to("")
+          .bind("catalog")
+          .to("")
+          .build();
+  private static final com.google.spanner.v1.ResultSet FIND_NON_EXISTING_TABLE_RESULT =
+      com.google.spanner.v1.ResultSet.newBuilder().setMetadata(FIND_TABLES_METADATA).build();
   private static final ResultSetMetadata COLUMNS_OPTIONS_METADATA =
       ResultSetMetadata.newBuilder()
           .setRowType(
@@ -430,7 +461,14 @@ public abstract class AbstractMockServerTest {
         StatementResult.query(FIND_ALL_TABLES_STATEMENT, FIND_ALL_TABLES_RESULT));
     mockSpanner.putStatementResult(
         StatementResult.query(
+            FIND_ALL_TABLES_EXCEPT_FOO_AND_BAR_STATEMENT,
+            FIND_ALL_TABLES_EXCEPT_FOO_AND_BAR_RESULT));
+    mockSpanner.putStatementResult(
+        StatementResult.query(
             FIND_FOO_BAR_NON_EXISTING_TABLE_TABLES_STATEMENT, FIND_ALL_TABLES_RESULT));
+    mockSpanner.putStatementResult(
+        StatementResult.query(
+            FIND_NON_EXISTING_TABLE_TABLES_STATEMENT, FIND_NON_EXISTING_TABLE_RESULT));
 
     // Poll Foo results.
     mockSpanner.putStatementResult(

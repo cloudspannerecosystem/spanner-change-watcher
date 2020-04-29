@@ -17,14 +17,17 @@
 package com.google.cloud.spanner.watcher;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import com.google.api.core.ApiService.Listener;
 import com.google.api.core.ApiService.State;
 import com.google.api.core.SettableApiFuture;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.DatabaseId;
+import com.google.cloud.spanner.ErrorCode;
 import com.google.cloud.spanner.MockSpannerServiceImpl.StatementResult;
 import com.google.cloud.spanner.Spanner;
+import com.google.cloud.spanner.SpannerException;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -159,8 +162,8 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
     ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     SpannerDatabaseTailer tailer =
         SpannerDatabaseTailer.newBuilder(spanner, db)
-            .setExecutor(executor)
             .allTables()
+            .setExecutor(executor)
             .setPollInterval(Duration.ofMillis(10L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, db)
@@ -183,5 +186,62 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
     assertThat(receivedRows.get()).isEqualTo(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
     assertThat(executor.isShutdown()).isFalse();
     executor.shutdown();
+  }
+
+  @Test
+  public void testBuildWithoutTables() {
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    try {
+      SpannerDatabaseTailer.newBuilder(spanner, db).includeTables(null).build();
+      fail("missing expected exception");
+    } catch (NullPointerException e) {
+    }
+  }
+
+  @Test
+  public void testTableNotFound() {
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    SpannerDatabaseTailer tailer =
+        SpannerDatabaseTailer.newBuilder(spanner, db).includeTables("NonExistingTable").build();
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            fail("Received unexpected row change");
+          }
+        });
+    try {
+      tailer.startAsync().awaitRunning();
+      fail("missing expected exception");
+    } catch (IllegalStateException e) {
+      assertThat(e.getCause()).isInstanceOf(SpannerException.class);
+      SpannerException se = (SpannerException) e.getCause();
+      assertThat(se.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+    }
+  }
+
+  @Test
+  public void testNoTablesFound() {
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    SpannerDatabaseTailer tailer =
+        SpannerDatabaseTailer.newBuilder(spanner, db).allTables().except("Foo", "Bar").build();
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            fail("Received unexpected row change");
+          }
+        });
+    try {
+      tailer.startAsync().awaitRunning();
+      fail("missing expected exception");
+    } catch (IllegalStateException e) {
+      assertThat(e.getCause()).isInstanceOf(SpannerException.class);
+      SpannerException se = (SpannerException) e.getCause();
+      assertThat(se.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+    }
   }
 }
