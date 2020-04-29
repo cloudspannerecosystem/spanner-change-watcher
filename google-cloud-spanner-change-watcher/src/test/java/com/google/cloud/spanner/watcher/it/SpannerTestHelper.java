@@ -103,6 +103,10 @@ public final class SpannerTestHelper {
     env.spanner.close();
   }
 
+  public static String getSpannerProjectId() {
+    return SPANNER_PROJECT_ID;
+  }
+
   /**
    * Returns the credentials to use to connect to Cloud Spanner based on the following ordered
    * options:
@@ -116,7 +120,7 @@ public final class SpannerTestHelper {
    * #getInstanceId()}. The credentials must also have permission to create an instance if {@link
    * #getInstanceId()} returns <code>null</code>.
    */
-  private static Credentials getSpannerCredentials() throws IOException {
+  public static Credentials getSpannerCredentials() throws IOException {
     if (SPANNER_CREDENTIALS_FILE != null) {
       return GoogleCredentials.fromStream(new FileInputStream(SPANNER_CREDENTIALS_FILE));
     }

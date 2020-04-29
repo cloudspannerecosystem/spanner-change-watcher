@@ -17,6 +17,7 @@
 package com.google.cloud.spanner.publisher.it;
 
 import com.google.api.gax.core.FixedCredentialsProvider;
+import com.google.api.gax.rpc.NotFoundException;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.ServiceOptions;
@@ -29,6 +30,8 @@ import com.google.cloud.spanner.watcher.it.SpannerTestHelper.ITSpannerEnv;
 import com.google.pubsub.v1.PushConfig;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.logging.Logger;
 
@@ -44,6 +47,8 @@ public final class PubsubTestHelper {
             String.format("scw-test-subscription-%08d", RND.nextInt(100000000)));
     final TopicAdminClient topicAdminClient;
     final SubscriptionAdminClient subAdminClient;
+    private final List<String> subscriptions = new ArrayList<String>();
+    private final List<String> topics = new ArrayList<>();
 
     public ITPubsubEnv() {
       try {
@@ -51,23 +56,41 @@ public final class PubsubTestHelper {
             TopicAdminClient.create(
                 TopicAdminSettings.newBuilder()
                     .setCredentialsProvider(
-                        FixedCredentialsProvider.create(PubsubTestHelper.getPubSubCredentials()))
+                        FixedCredentialsProvider.create(PubsubTestHelper.getPubsubCredentials()))
                     .build());
         subAdminClient =
             SubscriptionAdminClient.create(
                 SubscriptionAdminSettings.newBuilder()
                     .setCredentialsProvider(
-                        FixedCredentialsProvider.create(PubsubTestHelper.getPubSubCredentials()))
+                        FixedCredentialsProvider.create(PubsubTestHelper.getPubsubCredentials()))
                     .build());
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
     }
+
+    public void createTestTopic(String topic) throws Exception {
+      topicAdminClient.createTopic(
+          String.format("projects/%s/topics/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, topic));
+      topics.add(topic);
+      logger.info(String.format("Created topic %s", topic));
+    }
+
+    public void createTestSubscription(String topic, String subscription) {
+      subAdminClient.createSubscription(
+          String.format(
+              "projects/%s/subscriptions/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, subscription),
+          String.format("projects/%s/topics/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, topic),
+          PushConfig.getDefaultInstance(),
+          10);
+      subscriptions.add(subscription);
+      logger.info(String.format("Created subscription %s", subscription));
+    }
   }
 
   private static final Logger logger = Logger.getLogger(SpannerTestHelper.class.getName());
   private static final Random RND = new Random();
-  public static final String PUBSUB_PROJECT_ID =
+  private static final String PUBSUB_PROJECT_ID =
       System.getProperty("pubsub.project", ServiceOptions.getDefaultProjectId());
   private static final String PUBSUB_CREDENTIALS_FILE = System.getProperty("pubsub.credentials");
 
@@ -87,6 +110,29 @@ public final class PubsubTestHelper {
     logger.info(String.format("Created subscription %s", env.subscriptionId));
   }
 
+  public static void teardownPubsub(ITPubsubEnv env) {
+    for (String subscription : env.subscriptions) {
+      try {
+        env.subAdminClient.deleteSubscription(
+            String.format(
+                "projects/%s/subscriptions/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, subscription));
+        logger.info(String.format("Dropped subscription %s", subscription));
+      } catch (NotFoundException e) {
+        logger.info(
+            String.format("Could not drop subscription %s as it no longer exists", subscription));
+      }
+    }
+    for (String topic : env.topics) {
+      try {
+        env.topicAdminClient.deleteTopic(
+            String.format("projects/%s/topics/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, topic));
+        logger.info(String.format("Dropped topic %s", topic));
+      } catch (NotFoundException e) {
+        logger.info(String.format("Could not drop topic %s as it no longer exists", topic));
+      }
+    }
+  }
+
   public static void deleteTestTopic(ITPubsubEnv env) {
     env.subAdminClient.deleteSubscription(
         String.format(
@@ -101,7 +147,11 @@ public final class PubsubTestHelper {
     logger.info("Dropped test topic");
   }
 
-  public static Credentials getPubSubCredentials() throws IOException {
+  public static String getPubsubProjectId() {
+    return PUBSUB_PROJECT_ID;
+  }
+
+  public static Credentials getPubsubCredentials() throws IOException {
     if (PUBSUB_CREDENTIALS_FILE != null) {
       return GoogleCredentials.fromStream(new FileInputStream(PUBSUB_CREDENTIALS_FILE));
     }

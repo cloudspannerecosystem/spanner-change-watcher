@@ -24,10 +24,10 @@ import com.google.api.gax.grpc.GrpcTransportChannel;
 import com.google.api.gax.rpc.FixedTransportChannelProvider;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.Timestamp;
 import com.google.cloud.pubsub.v1.Publisher;
 import com.google.cloud.pubsub.v1.stub.PublisherStubSettings;
 import com.google.cloud.spanner.DatabaseClient;
-import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.NoOpListener;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishListener;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishRowChangeCallback;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
@@ -35,11 +35,14 @@ import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallb
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -64,7 +67,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
     private final DatabaseClient client;
     private String topicNameFormat;
     private ExecutorService startStopExecutor;
-    private PublishListener listener = new NoOpListener();
+    private List<PublishListener> listeners = new ArrayList<>();
     private Credentials credentials;
     private String endpoint = PublisherStubSettings.getDefaultEndpoint();
     private boolean usePlainText;
@@ -75,13 +78,13 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
     }
 
     /**
-     * Sets a {@link PublishListener} for the {@link SpannerDatabaseChangeEventPublisher}. This
+     * Adds a {@link PublishListener} for the {@link SpannerDatabaseChangeEventPublisher}. This
      * listener will receive a callback for each message that is published to Pubsub. This can be
      * used for monitoring and logging purposes, but is not required for publishing changes to
      * Pubsub.
      */
-    public Builder setListener(PublishListener publishListener) {
-      this.listener = Preconditions.checkNotNull(publishListener);
+    public Builder addListener(PublishListener publishListener) {
+      this.listeners.add(Preconditions.checkNotNull(publishListener));
       return this;
     }
 
@@ -174,7 +177,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
   private final DatabaseClient client;
   private final SpannerDatabaseChangeWatcher watcher;
   private final ExecutorService startStopExecutor;
-  private final PublishListener listener;
+  private final ImmutableList<PublishListener> listeners;
   private final boolean isOwnedExecutor;
   private Map<TableId, Publisher> publishers;
   private Map<TableId, SpannerToAvro> converters;
@@ -187,8 +190,17 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
         builder.startStopExecutor == null
             ? Executors.newCachedThreadPool()
             : builder.startStopExecutor;
-    this.listener = builder.listener;
+    this.listeners = ImmutableList.copyOf(builder.listeners);
     this.isOwnedExecutor = builder.startStopExecutor == null;
+    this.addListener(
+        new Listener() {
+          @Override
+          public void failed(State from, Throwable failure) {
+            logger.log(Level.WARNING, "Publisher failed", failure);
+            stopDependencies(false);
+          }
+        },
+        MoreExecutors.directExecutor());
   }
 
   @Override
@@ -236,8 +248,23 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                 }
                 publishers.put(table, publisherBuilder.build());
               }
+              watcher.addListener(
+                  new Listener() {
+                    @Override
+                    public void failed(State from, Throwable failure) {
+                      logger.log(Level.WARNING, "Watcher failed to start", failure);
+                      notifyFailed(failure);
+                    }
+
+                    @Override
+                    public void running() {
+                      logger.log(Level.FINE, "Watcher started successfully");
+                      notifyStarted();
+                    }
+                  },
+                  MoreExecutors.directExecutor());
               watcher.addCallback(
-                  new PublishRowChangeCallback(listener) {
+                  new PublishRowChangeCallback(listeners) {
                     @Override
                     Publisher getPublisher(TableId table) {
                       return publishers.get(table);
@@ -247,20 +274,16 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                     SpannerToAvro getConverter(TableId table) {
                       return converters.get(table);
                     }
-                  });
-              watcher.addListener(
-                  new Listener() {
-                    @Override
-                    public void failed(State from, Throwable failure) {
-                      notifyFailed(failure);
-                    }
 
                     @Override
-                    public void running() {
-                      notifyStarted();
+                    void onFailure(TableId table, Timestamp commitTimestamp, Throwable t) {
+                      logger.log(
+                          Level.WARNING,
+                          "Publish failed, stopping the watcher and failing the publisher",
+                          t);
+                      notifyFailed(t);
                     }
-                  },
-                  MoreExecutors.directExecutor());
+                  });
               watcher.startAsync();
             } catch (Throwable t) {
               notifyFailed(t);
@@ -272,6 +295,10 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
   @Override
   protected void doStop() {
     logger.log(Level.FINE, "Stopping event publisher");
+    stopDependencies(true);
+  }
+
+  private void stopDependencies(boolean notify) {
     watcher.addListener(
         new Listener() {
           @Override
@@ -287,9 +314,13 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                   Thread.currentThread().interrupt();
                 }
               }
-              notifyStopped();
+              if (notify) {
+                notifyStopped();
+              }
             } catch (Throwable t) {
-              notifyFailed(t);
+              if (notify) {
+                notifyFailed(t);
+              }
             } finally {
               if (isOwnedExecutor) {
                 startStopExecutor.shutdown();

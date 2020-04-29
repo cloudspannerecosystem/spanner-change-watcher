@@ -126,7 +126,7 @@ public class ITArchiverTest {
         ArchiverTestHelper.FUNCTIONS_PROJECT_ID,
         FUNCTION_LOCATION,
         env.functionId,
-        String.format("projects/%s/topics/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, env.topicId));
+        String.format("projects/%s/topics/%s", PubsubTestHelper.getPubsubProjectId(), env.topicId));
   }
 
   private static void createArchiverFunction(
@@ -281,9 +281,9 @@ public class ITArchiverTest {
         SpannerTableChangeEventPublisher.newBuilder(watcher, client)
             .setTopicName(
                 String.format(
-                    "projects/%s/topics/%s", PubsubTestHelper.PUBSUB_PROJECT_ID, env.topicId))
-            .setCredentials(PubsubTestHelper.getPubSubCredentials())
-            .setListener(
+                    "projects/%s/topics/%s", PubsubTestHelper.getPubsubProjectId(), env.topicId))
+            .setCredentials(PubsubTestHelper.getPubsubCredentials())
+            .addListener(
                 new PublishListener() {
                   @Override
                   public void onPublished(
@@ -299,6 +299,13 @@ public class ITArchiverTest {
                                 + "-"
                                 + messageId));
                     latch.countDown();
+                  }
+
+                  @Override
+                  public void onFailure(TableId table, Timestamp commitTimestamp, Throwable t) {
+                    System.err.printf(
+                        "Failed to publish change for table %s at %s: %s",
+                        table, commitTimestamp, t);
                   }
                 })
             .build();

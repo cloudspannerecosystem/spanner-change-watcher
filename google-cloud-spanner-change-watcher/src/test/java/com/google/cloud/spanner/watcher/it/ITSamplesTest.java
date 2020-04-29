@@ -351,7 +351,6 @@ public class ITSamplesTest {
           latch);
       latch.await(30L, TimeUnit.SECONDS);
       // Drop one of the tables that is being watched.
-
       Logger logger = Logger.getLogger(SpannerTableTailer.class.getName());
       Level level = logger.getLevel();
       PrintStream stdErr = System.err;

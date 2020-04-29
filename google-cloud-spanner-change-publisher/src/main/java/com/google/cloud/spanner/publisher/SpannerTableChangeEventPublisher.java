@@ -37,11 +37,14 @@ import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallb
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.pubsub.v1.PubsubMessage;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -63,12 +66,10 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
    */
   public static interface PublishListener {
     /** Called when a change is successfully published to Pubsub. */
-    void onPublished(TableId table, Timestamp commitTimestamp, String messageId);
-  }
+    default void onPublished(TableId table, Timestamp commitTimestamp, String messageId) {}
 
-  static final class NoOpListener implements PublishListener {
-    @Override
-    public void onPublished(TableId table, Timestamp commitTimestamp, String messageId) {}
+    /** Called when a change could not be published to Pubsub. */
+    default void onFailure(TableId table, Timestamp commitTimestamp, Throwable t) {}
   }
 
   /** Builder for a {@link SpannerTableChangeEventPublisher}. */
@@ -78,7 +79,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
     private Publisher publisher;
     private String topicName;
     private ExecutorService startStopExecutor;
-    private PublishListener listener = new NoOpListener();
+    private List<PublishListener> listeners = new ArrayList<>();
     private Credentials credentials;
     private String endpoint = PublisherStubSettings.getDefaultEndpoint();
     private boolean usePlainText;
@@ -89,13 +90,13 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
     }
 
     /**
-     * Sets a {@link PublishListener} for the {@link SpannerTableChangeEventPublisher}. This
+     * Adds a {@link PublishListener} for the {@link SpannerTableChangeEventPublisher}. This
      * listener will receive a callback for each message that is published to Pubsub. This can be
      * used for monitoring and logging purposes, but is not required for publishing changes to
      * Pubsub.
      */
-    public Builder setListener(PublishListener publishListener) {
-      this.listener = Preconditions.checkNotNull(publishListener);
+    public Builder addListener(PublishListener publishListener) {
+      this.listeners.add(Preconditions.checkNotNull(publishListener));
       return this;
     }
 
@@ -189,15 +190,17 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
   }
 
   abstract static class PublishRowChangeCallback implements RowChangeCallback {
-    private final PublishListener listener;
+    private final ImmutableList<PublishListener> listeners;
 
-    PublishRowChangeCallback(PublishListener listener) {
-      this.listener = listener;
+    PublishRowChangeCallback(ImmutableList<PublishListener> listeners) {
+      this.listeners = listeners;
     }
 
     abstract SpannerToAvro getConverter(TableId table);
 
     abstract Publisher getPublisher(TableId table);
+
+    abstract void onFailure(TableId table, Timestamp commitTimestamp, Throwable t);
 
     @Override
     public void rowChange(final TableId table, Row row, final Timestamp commitTimestamp) {
@@ -221,7 +224,9 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
             @Override
             public void onSuccess(String messageId) {
               logger.log(Level.FINE, "Successfully published change to row {0}", rowString);
-              listener.onPublished(table, commitTimestamp, messageId);
+              for (PublishListener listener : listeners) {
+                listener.onPublished(table, commitTimestamp, messageId);
+              }
             }
 
             @Override
@@ -229,6 +234,10 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
               logger.log(Level.WARNING, "Failed to publish change", t);
               logger.log(
                   Level.FINE, String.format("Failed to publish change to row {0}", rowString));
+              PublishRowChangeCallback.this.onFailure(table, commitTimestamp, t);
+              for (PublishListener listener : listeners) {
+                listener.onFailure(table, commitTimestamp, t);
+              }
             }
           },
           MoreExecutors.directExecutor());
@@ -238,7 +247,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
   private final Builder builder;
   private final DatabaseClient client;
   private Publisher publisher;
-  private final PublishListener listener;
+  private final ImmutableList<PublishListener> listeners;
   private final ExecutorService startStopExecutor;
   private final boolean isOwnedExecutor;
   private final SpannerTableChangeWatcher watcher;
@@ -254,7 +263,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
     if (builder.publisher != null) {
       this.publisher = builder.publisher;
     }
-    this.listener = builder.listener;
+    this.listeners = ImmutableList.copyOf(builder.listeners);
     this.watcher = builder.watcher;
   }
 
@@ -302,7 +311,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
                   },
                   MoreExecutors.directExecutor());
               watcher.addCallback(
-                  new PublishRowChangeCallback(listener) {
+                  new PublishRowChangeCallback(listeners) {
                     @Override
                     Publisher getPublisher(TableId table) {
                       return publisher;
@@ -311,6 +320,12 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
                     @Override
                     SpannerToAvro getConverter(TableId table) {
                       return converter;
+                    }
+
+                    @Override
+                    void onFailure(TableId table, Timestamp commitTimestamp, Throwable t) {
+                      stopDependencies(false);
+                      notifyFailed(t);
                     }
                   });
               watcher.startAsync();
@@ -323,6 +338,11 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
 
   @Override
   public void doStop() {
+    logger.log(Level.FINE, "Stopping event publisher");
+    stopDependencies(true);
+  }
+
+  private void stopDependencies(boolean notify) {
     startStopExecutor.execute(
         new Runnable() {
           @Override
@@ -330,9 +350,13 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
             try {
               watcher.stopAsync().awaitTerminated();
               publisher.shutdown();
-              notifyStopped();
+              if (notify) {
+                notifyStopped();
+              }
             } catch (Throwable t) {
-              notifyFailed(t);
+              if (notify) {
+                notifyFailed(t);
+              }
             }
           }
         });
