@@ -30,10 +30,13 @@ import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerExceptionFactory;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.Struct;
+import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
 import com.google.common.base.MoreObjects;
 import com.google.spanner.admin.database.v1.UpdateDatabaseDdlMetadata;
 import java.util.Collections;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -53,6 +56,9 @@ import javax.annotation.Nullable;
  * The table name and column names are configurable.
  */
 public class SpannerCommitTimestampRepository implements CommitTimestampRepository {
+  private static final Logger logger =
+      Logger.getLogger(SpannerCommitTimestampRepository.class.getName());
+
   static final String DEFAULT_TABLE_CATALOG = "";
   static final String DEFAULT_TABLE_SCHEMA = "";
   static final String DEFAULT_TABLE_NAME = "LAST_SEEN_COMMIT_TIMESTAMPS";
@@ -234,17 +240,35 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
           initialized = true;
           return;
         } else {
+          logger.log(
+              Level.WARNING,
+              "Commit timestamps table {0} not found",
+              TableId.of(databaseId, commitTimestampsTable));
           throw SpannerExceptionFactory.newSpannerException(
               ErrorCode.NOT_FOUND, String.format("Table %s not found", commitTimestampsTable));
         }
       }
     }
     // Table exists, check that it contains the expected columns.
-    verifyTable();
+    try {
+      verifyTable();
+    } catch (Throwable t) {
+      logger.log(
+          LogRecordBuilder.of(
+              Level.WARNING,
+              "Verification of commit timestamps table {0} failed",
+              TableId.of(databaseId, commitTimestampsTable),
+              t));
+      throw t;
+    }
     initialized = true;
   }
 
   private void createTable() {
+    logger.log(
+        Level.INFO,
+        "Creating commit timestamps table {0}",
+        TableId.of(databaseId, commitTimestampsTable));
     String createTable =
         String.format(
             CREATE_TABLE_STATEMENT,
@@ -266,9 +290,25 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
             null);
     try {
       fut.get();
+      logger.log(
+          Level.INFO,
+          "Created commit timestamps table {0}",
+          TableId.of(databaseId, commitTimestampsTable));
     } catch (ExecutionException e) {
+      logger.log(
+          LogRecordBuilder.of(
+              Level.WARNING,
+              "Could not create commit timestamps table {0}",
+              TableId.of(databaseId, commitTimestampsTable),
+              e));
       SpannerExceptionFactory.newSpannerException(e.getCause());
     } catch (InterruptedException e) {
+      logger.log(
+          LogRecordBuilder.of(
+              Level.WARNING,
+              "Create commit timestamps table {0} interrupted",
+              TableId.of(databaseId, commitTimestampsTable),
+              e));
       SpannerExceptionFactory.propagateInterrupt(e);
     }
   }

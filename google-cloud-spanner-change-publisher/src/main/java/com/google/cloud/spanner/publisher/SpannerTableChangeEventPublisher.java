@@ -34,6 +34,7 @@ import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
+import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -206,7 +207,9 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
     public void rowChange(final TableId table, Row row, final Timestamp commitTimestamp) {
       // Only use resources to convert the row to a string if we are actually going to log it.
       final String rowString = logger.isLoggable(Level.FINE) ? row.asStruct().toString() : null;
-      logger.log(Level.FINE, "Publishing change to row {0}", rowString);
+      logger.log(
+          LogRecordBuilder.of(
+              Level.FINE, "Publishing change in table {0} for row {1}", table, rowString));
       ApiFuture<String> result =
           getPublisher(table)
               .publish(
@@ -223,7 +226,12 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
           new ApiFutureCallback<String>() {
             @Override
             public void onSuccess(String messageId) {
-              logger.log(Level.FINE, "Successfully published change to row {0}", rowString);
+              logger.log(
+                  LogRecordBuilder.of(
+                      Level.FINE,
+                      "Successfully published change in table {0} for row {1}",
+                      table,
+                      rowString));
               for (PublishListener listener : listeners) {
                 listener.onPublished(table, commitTimestamp, messageId);
               }
@@ -231,9 +239,13 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
 
             @Override
             public void onFailure(Throwable t) {
-              logger.log(Level.WARNING, "Failed to publish change", t);
               logger.log(
-                  Level.FINE, String.format("Failed to publish change to row {0}", rowString));
+                  LogRecordBuilder.of(
+                      Level.WARNING, "Failed to publish change in table {0}", table, t));
+              logger.log(
+                  Level.FINE,
+                  String.format(
+                      "Failed to publish change in table {0} for row {1}", table, rowString));
               PublishRowChangeCallback.this.onFailure(table, commitTimestamp, t);
               for (PublishListener listener : listeners) {
                 listener.onFailure(table, commitTimestamp, t);
@@ -269,6 +281,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
 
   @Override
   protected void doStart() {
+    logger.log(Level.INFO, "Starting publisher for table {0}", watcher.getTable());
     startStopExecutor.execute(
         new Runnable() {
           @Override
@@ -301,11 +314,18 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
                   new Listener() {
                     @Override
                     public void running() {
+                      logger.log(Level.INFO, "Watcher for table {0} started", watcher.getTable());
                       notifyStarted();
                     }
 
                     @Override
                     public void failed(State from, Throwable failure) {
+                      logger.log(
+                          LogRecordBuilder.of(
+                              Level.WARNING,
+                              "Watcher for table {0} failed",
+                              watcher.getTable(),
+                              failure));
                       notifyFailed(failure);
                     }
                   },
@@ -330,6 +350,12 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
                   });
               watcher.startAsync();
             } catch (Throwable t) {
+              logger.log(
+                  LogRecordBuilder.of(
+                      Level.WARNING,
+                      "Starting publisher for table {0} failed",
+                      watcher.getTable(),
+                      t));
               notifyFailed(t);
             }
           }
@@ -338,7 +364,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
 
   @Override
   public void doStop() {
-    logger.log(Level.FINE, "Stopping event publisher");
+    logger.log(Level.INFO, "Stopping event publisher for table {0}", watcher.getTable());
     stopDependencies(true);
   }
 
@@ -350,10 +376,15 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
             try {
               watcher.stopAsync().awaitTerminated();
               publisher.shutdown();
+              logger.log(Level.INFO, "Event publisher for table {0} stopped", watcher.getTable());
               if (notify) {
                 notifyStopped();
               }
             } catch (Throwable t) {
+              logger.log(
+                  Level.WARNING,
+                  "Stopping event publisher for table {0} failed",
+                  watcher.getTable());
               if (notify) {
                 notifyFailed(t);
               }
