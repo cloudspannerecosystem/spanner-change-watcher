@@ -17,8 +17,10 @@
 package com.google.cloud.spanner.publisher.it;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import com.google.api.gax.core.FixedCredentialsProvider;
+import com.google.api.gax.rpc.NotFoundException;
 import com.google.cloud.Timestamp;
 import com.google.cloud.pubsub.v1.AckReplyConsumer;
 import com.google.cloud.pubsub.v1.MessageReceiver;
@@ -150,5 +152,33 @@ public class ITSpannerTableChangeEventPublisherTest {
     receivedMessagesCount.await(10L, TimeUnit.SECONDS);
     assertThat(receivedMessages).hasSize(3);
     eventPublisher.stopAsync().awaitTerminated();
+  }
+
+  @Test
+  public void testTopicNotFound() throws Exception {
+    Spanner spanner = env.getSpanner();
+    DatabaseClient client = spanner.getDatabaseClient(database.getId());
+    SpannerTableChangeWatcher watcher =
+        SpannerTableTailer.newBuilder(spanner, TableId.of(database.getId(), "NUMBERS"))
+            .setPollInterval(Duration.ofMillis(50L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    SpannerTableChangeEventPublisher eventPublisher =
+        SpannerTableChangeEventPublisher.newBuilder(watcher, client)
+            .setTopicName(
+                String.format(
+                    "projects/%s/topics/%s-not-found",
+                    PubsubTestHelper.getPubsubProjectId(), env.topicId))
+            .setCredentials(PubsubTestHelper.getPubsubCredentials())
+            .build();
+    try {
+      eventPublisher.startAsync().awaitRunning();
+      fail("missing expected exception");
+    } catch (IllegalStateException e) {
+      assertThat(e.getCause()).isInstanceOf(NotFoundException.class);
+    }
   }
 }

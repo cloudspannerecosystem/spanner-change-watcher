@@ -91,9 +91,10 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
 
     /**
      * Sets the format of the names of the topics where the events should be published. The name
-     * format should be in the form 'projects/<project-id>/topics/<topic-id>', where <topic-id> may
-     * contain a number of place holders for the name of the database and table that caused the
-     * event. These place holders will be replaced by the actual database name and/or table name.
+     * format should be in the form 'projects/&lt;project-id&gt;/topics/&lt;topic-id&gt;', where
+     * &lt;topic-id&gt; may contain a number of place holders for the name of the database and table
+     * that caused the event. These place holders will be replaced by the actual database name
+     * and/or table name.
      *
      * <p>Possible place holders are:
      *
@@ -218,6 +219,27 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
   @Override
   protected void doStart() {
     logger.log(Level.INFO, "Starting event publisher for database {0}", watcher.getDatabaseId());
+    addListener(
+        new Listener() {
+          @Override
+          public void failed(State from, Throwable failure) {
+            logger.log(
+                Level.WARNING, "Event publisher for database {0} failed", watcher.getDatabaseId());
+          }
+
+          @Override
+          public void running() {
+            logger.log(
+                Level.INFO, "Event publisher for database {0} started", watcher.getDatabaseId());
+          }
+
+          @Override
+          public void terminated(State from) {
+            logger.log(
+                Level.INFO, "Event publisher for database {0} stopped", watcher.getDatabaseId());
+          }
+        },
+        MoreExecutors.directExecutor());
     startStopExecutor.execute(
         new Runnable() {
           @Override
@@ -225,37 +247,40 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
             try {
               publishers = new HashMap<>(watcher.getTables().size());
               converters = new HashMap<>(watcher.getTables().size());
-              for (TableId table : watcher.getTables()) {
-                // TODO: Re-use code from SpannerTableChangeEventPublisher.
-                converters.put(table, new SpannerToAvro(client, table));
-                Credentials useCredentials =
-                    credentials == null ? GoogleCredentials.getApplicationDefault() : credentials;
-                if (useCredentials == null) {
-                  throw new IllegalArgumentException(
-                      "There is no credentials set on the builder, and the environment has no default credentials set.");
+              Credentials useCredentials =
+                  credentials == null ? GoogleCredentials.getApplicationDefault() : credentials;
+              if (useCredentials == null) {
+                throw new IllegalArgumentException(
+                    "There is no credentials set on the builder, and the environment has no default credentials set.");
+              }
+              try (PubsubHelper helper = new PubsubHelper(useCredentials, endpoint, usePlainText)) {
+                for (TableId table : watcher.getTables()) {
+                  // TODO: Re-use code from SpannerTableChangeEventPublisher.
+                  converters.put(table, new SpannerToAvro(client, table));
+                  String topicName =
+                      topicNameFormat
+                          .replace("%project%", table.getDatabaseId().getInstanceId().getProject())
+                          .replace(
+                              "%instance%", table.getDatabaseId().getInstanceId().getInstance())
+                          .replace("%database%", table.getDatabaseId().getDatabase())
+                          .replace("%catalog%", table.getCatalog())
+                          .replace("%schema%", table.getSchema())
+                          .replace("%table%", table.getTable());
+                  // Check that the given topic exists.
+                  helper.checkExists(topicName);
+                  Publisher.Builder publisherBuilder =
+                      Publisher.newBuilder(topicName)
+                          .setCredentialsProvider(FixedCredentialsProvider.create(useCredentials))
+                          .setEndpoint(endpoint);
+                  if (usePlainText) {
+                    ManagedChannel channel =
+                        ManagedChannelBuilder.forTarget(endpoint).usePlaintext().build();
+                    publisherBuilder.setChannelProvider(
+                        FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel)));
+                    publisherBuilder.setCredentialsProvider(NoCredentialsProvider.create());
+                  }
+                  publishers.put(table, publisherBuilder.build());
                 }
-                Publisher.Builder publisherBuilder =
-                    Publisher.newBuilder(
-                            topicNameFormat
-                                .replace(
-                                    "%project%", table.getDatabaseId().getInstanceId().getProject())
-                                .replace(
-                                    "%instance%",
-                                    table.getDatabaseId().getInstanceId().getInstance())
-                                .replace("%database%", table.getDatabaseId().getDatabase())
-                                .replace("%catalog%", table.getCatalog())
-                                .replace("%schema%", table.getSchema())
-                                .replace("%table%", table.getTable()))
-                        .setCredentialsProvider(FixedCredentialsProvider.create(useCredentials))
-                        .setEndpoint(endpoint);
-                if (usePlainText) {
-                  ManagedChannel channel =
-                      ManagedChannelBuilder.forTarget(endpoint).usePlaintext().build();
-                  publisherBuilder.setChannelProvider(
-                      FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel)));
-                  publisherBuilder.setCredentialsProvider(NoCredentialsProvider.create());
-                }
-                publishers.put(table, publisherBuilder.build());
               }
               watcher.addListener(
                   new Listener() {
