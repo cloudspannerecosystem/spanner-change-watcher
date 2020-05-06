@@ -297,6 +297,10 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
                   throw new IllegalArgumentException(
                       "There is no credentials set on the builder, and the environment has no default credentials set.");
                 }
+                try (PubsubHelper helper =
+                    new PubsubHelper(credentials, builder.endpoint, builder.usePlainText)) {
+                  helper.checkExists(builder.topicName);
+                }
                 Publisher.Builder publisherBuilder =
                     Publisher.newBuilder(builder.topicName)
                         .setCredentialsProvider(FixedCredentialsProvider.create(credentials))

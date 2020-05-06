@@ -20,6 +20,7 @@ import com.google.api.gax.grpc.testing.MockGrpcService;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.Empty;
 import com.google.pubsub.v1.AcknowledgeRequest;
+import com.google.pubsub.v1.GetTopicRequest;
 import com.google.pubsub.v1.ModifyAckDeadlineRequest;
 import com.google.pubsub.v1.PublishRequest;
 import com.google.pubsub.v1.PublishResponse;
@@ -31,6 +32,7 @@ import com.google.pubsub.v1.ReceivedMessage;
 import com.google.pubsub.v1.StreamingPullRequest;
 import com.google.pubsub.v1.StreamingPullResponse;
 import com.google.pubsub.v1.SubscriberGrpc.SubscriberImplBase;
+import com.google.pubsub.v1.Topic;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.stub.StreamObserver;
 import java.util.Deque;
@@ -50,6 +52,12 @@ public class MockPubSubServer {
         builder.addMessageIds(UUID.randomUUID().toString());
       }
       responseObserver.onNext(builder.build());
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getTopic(GetTopicRequest request, StreamObserver<Topic> responseObserver) {
+      responseObserver.onNext(Topic.newBuilder().setName(request.getTopic()).build());
       responseObserver.onCompleted();
     }
 
