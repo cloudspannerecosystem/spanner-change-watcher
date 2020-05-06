@@ -34,6 +34,8 @@ import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
 import com.google.common.base.MoreObjects;
 import com.google.spanner.admin.database.v1.UpdateDatabaseDdlMetadata;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -101,6 +103,7 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
           + "        `%s` STRING(MAX) NOT NULL,\n" // TABLE_NAME
           + "        `%s` TIMESTAMP NOT NULL\n" // LAST_SEEN_COMMIT_TIMESTAMP
           + ") PRIMARY KEY (`%s`, `%s`, `%s`, `%s`)";
+  private static final Set<String> RUNNING_CREATE_TABLE_STATEMENTS = new HashSet<>();
 
   /** Builder for a {@link SpannerCommitTimestampRepository}. */
   public static class Builder {
@@ -282,34 +285,64 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
             catalogCol,
             schemaCol,
             tableCol);
-    OperationFuture<Void, UpdateDatabaseDdlMetadata> fut =
-        adminClient.updateDatabaseDdl(
-            databaseId.getInstanceId().getInstance(),
-            databaseId.getDatabase(),
-            Collections.singleton(createTable),
-            null);
+    boolean tableAlreadyBeingCreated = false;
+    synchronized (RUNNING_CREATE_TABLE_STATEMENTS) {
+      tableAlreadyBeingCreated = RUNNING_CREATE_TABLE_STATEMENTS.contains(createTable);
+      if (!tableAlreadyBeingCreated) {
+        RUNNING_CREATE_TABLE_STATEMENTS.add(createTable);
+      }
+    }
+    if (tableAlreadyBeingCreated) {
+      waitForTableCreationToFinish(createTable);
+      return;
+    }
     try {
-      fut.get();
-      logger.log(
-          Level.INFO,
-          "Created commit timestamps table {0}",
-          TableId.of(databaseId, commitTimestampsTable));
-    } catch (ExecutionException e) {
-      logger.log(
-          LogRecordBuilder.of(
-              Level.WARNING,
-              "Could not create commit timestamps table {0}",
-              TableId.of(databaseId, commitTimestampsTable),
-              e));
-      SpannerExceptionFactory.newSpannerException(e.getCause());
-    } catch (InterruptedException e) {
-      logger.log(
-          LogRecordBuilder.of(
-              Level.WARNING,
-              "Create commit timestamps table {0} interrupted",
-              TableId.of(databaseId, commitTimestampsTable),
-              e));
-      SpannerExceptionFactory.propagateInterrupt(e);
+      OperationFuture<Void, UpdateDatabaseDdlMetadata> fut =
+          adminClient.updateDatabaseDdl(
+              databaseId.getInstanceId().getInstance(),
+              databaseId.getDatabase(),
+              Collections.singleton(createTable),
+              null);
+      try {
+        fut.get();
+        logger.log(
+            Level.INFO,
+            "Created commit timestamps table {0}",
+            TableId.of(databaseId, commitTimestampsTable));
+      } catch (ExecutionException e) {
+        logger.log(
+            LogRecordBuilder.of(
+                Level.WARNING,
+                "Could not create commit timestamps table {0}",
+                TableId.of(databaseId, commitTimestampsTable),
+                e));
+        SpannerExceptionFactory.newSpannerException(e.getCause());
+      } catch (InterruptedException e) {
+        logger.log(
+            LogRecordBuilder.of(
+                Level.WARNING,
+                "Create commit timestamps table {0} interrupted",
+                TableId.of(databaseId, commitTimestampsTable),
+                e));
+        SpannerExceptionFactory.propagateInterrupt(e);
+      }
+    } finally {
+      RUNNING_CREATE_TABLE_STATEMENTS.remove(createTable);
+    }
+  }
+
+  private void waitForTableCreationToFinish(String createTable) {
+    while (true) {
+      try {
+        Thread.sleep(1000L);
+      } catch (InterruptedException e) {
+        SpannerExceptionFactory.propagateInterrupt(e);
+      }
+      synchronized (RUNNING_CREATE_TABLE_STATEMENTS) {
+        if (!RUNNING_CREATE_TABLE_STATEMENTS.contains(createTable)) {
+          return;
+        }
+      }
     }
   }
 
