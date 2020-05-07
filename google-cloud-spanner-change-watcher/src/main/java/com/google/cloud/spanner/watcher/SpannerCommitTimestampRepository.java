@@ -31,7 +31,6 @@ import com.google.cloud.spanner.SpannerExceptionFactory;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
-import com.google.common.base.MoreObjects;
 import com.google.spanner.admin.database.v1.UpdateDatabaseDdlMetadata;
 import java.util.Collections;
 import java.util.HashSet;
@@ -203,9 +202,9 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
   private final String schemaCol;
   private final String tableCol;
   private final String tsCol;
-  private final Timestamp initialCommitTimestamp;
   private final Iterable<String> tsColumns;
   private boolean initialized = false;
+  private Timestamp initialCommitTimestamp;
 
   private SpannerCommitTimestampRepository(Builder builder) {
     this.databaseId = builder.databaseId;
@@ -220,13 +219,20 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
     this.schemaCol = builder.schemaCol;
     this.tableCol = builder.tableCol;
     this.tsCol = builder.tsCol;
-    this.initialCommitTimestamp =
-        MoreObjects.firstNonNull(builder.initialCommitTimestamp, Timestamp.now());
+    this.initialCommitTimestamp = builder.initialCommitTimestamp;
     this.tsColumns = Collections.singleton(builder.tsCol);
   }
 
   /** Checks that the table is present and contains the actually expected columns. */
   private void initialize() {
+    if (initialCommitTimestamp == null) {
+      try (ResultSet rs =
+          client.singleUse().executeQuery(Statement.of("SELECT CURRENT_TIMESTAMP"))) {
+        while (rs.next()) {
+          initialCommitTimestamp = rs.getTimestamp(0);
+        }
+      }
+    }
     Statement statement =
         Statement.newBuilder(FIND_TABLE_STATEMENT)
             .bind("catalog")

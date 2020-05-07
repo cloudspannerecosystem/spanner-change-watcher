@@ -99,7 +99,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
      * <p>Possible place holders are:
      *
      * <ul>
-     *   <li>%project%}: The project id of the Cloud Spanner database.
+     *   <li>%project%: The project id of the Cloud Spanner database.
      *   <li>%instance%: The instance id of the Cloud Spanner database.
      *   <li>%database%: The database id of the Cloud Spanner database.
      *   <li>%catalog%: The catalog name of the Cloud Spanner table.
