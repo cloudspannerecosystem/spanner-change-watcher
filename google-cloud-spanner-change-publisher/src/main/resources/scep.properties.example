@@ -1,0 +1,93 @@
+
+# ----- GENERAL SETTINGS ----- #
+# General settings for Spanner Change Event Publisher (scep)
+
+# Maximum time that the JVM should wait for the publisher to shutdown when the JVM is shutting
+# down. When the JVM is shutdown, scep will stop the Pubsub publisher and the Spanner change
+# watcher and close any resources in use. This should normally finish within a couple of seconds.
+# If the shutdown has not finished within the below timeout, the JVM shutdown will proceed without
+# any further waiting on Pubsub and Spanner.  
+
+scep.maxWaitForShutdownSeconds=20
+
+
+# ----- SPANNER SETTINGS ------ #
+# Settings for Spanner watcher.
+
+# The database to watch for changes.
+# The project only needs to be set if the default project ID of the environment is not the
+# project that should be used.
+
+scep.spanner.project=my-spanner-project
+scep.spanner.instance=my-instance
+scep.spanner.database=my-database
+
+# The account to use to establish a connection with the Spanner database. This only needs to be
+# set if the default Google Cloud credentials of the environment are not the one that should be
+# used.
+
+scep.spanner.credentials=/path/to/spanner-credentials.json
+
+
+# ----- TABLE SELECTION ----- #
+
+# The tables in the database to watch for changes. By default, the watcher will monitor all tables
+# in the database that have a column with the option ALLOW_COMMIT_TIMESTAMP=TRUE for changes. This
+# can be changed by specifying a value for either includedTables or excludedTables.
+
+# Turn watching all tables in the database for changes on/off.
+
+scep.spanner.allTables=false
+
+
+# A list of tables that should be excluded from monitoring. This option may only be used in
+# combination with the option allTables=true. You do not need to exclude tables that do not have a
+# column with the option ALLOW_COMMIT_TIMESTAMP=TRUE. Those tables will automatically be excluded.
+
+#scep.spanner.excludedTables=TABLE1,TABLE2,TABLE3
+
+
+# A list of tables that should be included in the monitoring. This option may only be used in
+# combination with the option allTables=false.
+
+scep.spanner.includedTables=TABLE1,TABLE2,TABLE3
+
+
+# The poll interval of the Spanner tailer. The interval should be given in ISO-8601 period format.
+# The default poll interval is 1 second.
+
+scep.spanner.pollInterval=PT0.5S
+
+
+# ----- PUBSUB SETTINGS ----- #
+
+# Settings for the Pubsub topic(s) where the changes should be published.
+# The project only needs to be set if the default project ID of the environment is not the
+# project that should be used. The Pubsub project ID and Spanner project ID may be different.
+
+scep.pubsub.project=my-pubsub-project
+
+
+# The account to use to connect to Pubsub. This only needs to be set if the default Google
+# Cloud credentials of the environment are not the one that should be used.
+
+scep.pubsub.credentials=/path/to/pubsub-credentials.json
+
+
+# Sets the Pubsub Topic(s) where the changes should be published. All changes can be published to
+# both a single topic or different topics for different tables. The topicNameFormat may contain a
+# number of placeholders that will automatically be replaced with the actual values.
+# 
+# The possible placeholders are:
+# * %project%:  The project id of the Cloud Spanner database.
+# * %instance%: The instance id of the Cloud Spanner database.
+# * %database%: The database id of the Cloud Spanner database.
+# * %catalog%:  The catalog name of the Cloud Spanner table.
+# * %schema%:   The schema name of the Cloud Spanner table.
+# * %table%:    The table name of the Cloud Spanner table.
+# 
+# This example will publish the changes to topics with names like
+# 'projects/my-pubsub-project/topics/spanner-update-my-database-TABLE1' and
+# 'projects/my-pubsub-project/topics/spanner-update-my-database-TABLE2' etc.
+  
+scep.pubsub.topicNameFormat=spanner-update-%database%-%table%

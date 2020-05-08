@@ -65,6 +65,31 @@ public class Samples {
     this.pubsubCredentials = pubsubCredentials;
   }
 
+  void simpleSample() throws IOException {
+    String instance = "my-instance";
+    String database = "my-database";
+    // The %table% placeholder will automatically be replaced with the name of the table where the
+    // change occurred.
+    String topicNameFormat =
+        String.format(
+            "projects/%s/topics/spanner-update-%%table%%", ServiceOptions.getDefaultProjectId());
+
+    // Setup Spanner change watcher.
+    Spanner spanner = SpannerOptions.newBuilder().build().getService();
+    DatabaseId databaseId = DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database);
+    SpannerDatabaseChangeWatcher watcher =
+        SpannerDatabaseTailer.newBuilder(spanner, databaseId).allTables().build();
+
+    // Setup Spanner change publisher.
+    DatabaseClient client = spanner.getDatabaseClient(databaseId);
+    SpannerDatabaseChangeEventPublisher eventPublisher =
+        SpannerDatabaseChangeEventPublisher.newBuilder(watcher, client)
+            .setTopicNameFormat(topicNameFormat)
+            .build();
+    // Start the change publisher. This will automatically also start the change watcher.
+    eventPublisher.startAsync().awaitRunning();
+  }
+
   /** Publish changes from a single table in a database to Pubsub. */
   public void publishChangesFromSingleTableExample(
       String instance, // "my-instance"

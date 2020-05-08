@@ -1,3 +1,19 @@
+/*
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.cloud.spanner.publisher;
 
 import static com.google.cloud.spanner.publisher.Configuration.prefix;
@@ -20,11 +36,20 @@ import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Main class for running a {@link SpannerDatabaseChangeEventPublisher} as a standalone application.
+ * Configuration for which database and tables to watch and where publish the changes can be
+ * configured in a properties file or as system properties. A list of all supported properties are
+ * given in the example properties file in src/main/resources. Each property in the configuration
+ * file can also be specified as a system property. System properties will override configuration
+ * from a properties file.
  */
 public class Main {
+  private static final Logger logger = Logger.getLogger(Main.class.getName());
+
   private static final String DEFAULT_PROPERTIES_FILE_NAME = prefix("properties");
   private static final SettableApiFuture<Void> initialized = SettableApiFuture.create();
   private static SpannerDatabaseChangeEventPublisher publisher;
@@ -39,13 +64,18 @@ public class Main {
   }
 
   public static void main(String[] args) throws IOException {
+    logger.log(Level.INFO, "Starting Spanner Change Event Publisher");
     try {
+      logger.log(Level.INFO, "Reading configuration");
       Configuration config = Configuration.createConfiguration(readPropertiesFromFile());
+      logger.log(Level.INFO, "Configuration Spanner client");
       Spanner spanner = createSpannerOptions(config).getService();
+      logger.log(Level.INFO, "Creating Spanner change watcher");
       SpannerDatabaseChangeWatcher watcher = createWatcher(config, spanner);
 
       DatabaseId db = config.getDatabaseId();
       DatabaseClient client = spanner.getDatabaseClient(db);
+      logger.log(Level.INFO, "Creating Spanner change publisher");
       publisher = createPublisher(config, watcher, client);
       publisher
           .startAsync()
@@ -63,27 +93,34 @@ public class Main {
               },
               MoreExecutors.directExecutor());
 
+      logger.log(Level.INFO, "Setting up shutdown hook");
       Runtime.getRuntime()
           .addShutdownHook(
               new Thread() {
                 @Override
                 public void run() {
+                  logger.log(Level.INFO, "Shutting down change watcher and publisher");
                   try {
                     publisher
                         .stopAsync()
                         .awaitTerminated(config.getMaxWaitForShutdownSeconds(), TimeUnit.SECONDS);
                   } catch (TimeoutException e) {
-                    // ignore.
+                    logger.log(
+                        Level.WARNING, "Failed to stop change publisher in a timely fashion", e);
                   }
                 }
               });
       initialized.set(null);
     } catch (Throwable t) {
+      logger.log(Level.SEVERE, "Failed to start Spanner Change Event Publisher", t);
       initialized.setException(t);
+      return;
     }
-    if (publisher != null) {
-      publisher.awaitTerminated();
-    }
+    logger.info("Waiting for Spanner Change Event Publisher to start");
+    publisher.awaitRunning();
+    logger.info("Spanner Change Event Publisher started");
+    publisher.awaitTerminated();
+    logger.info("Spanner Change Event Publisher stopped");
   }
 
   static Properties readPropertiesFromFile() throws IOException {

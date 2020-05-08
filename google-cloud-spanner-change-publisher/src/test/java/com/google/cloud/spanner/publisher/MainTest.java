@@ -1,3 +1,19 @@
+/*
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.cloud.spanner.publisher;
 
 import static com.google.cloud.spanner.publisher.Configuration.createConfiguration;
@@ -13,7 +29,10 @@ import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.watcher.SpannerDatabaseTailer;
 import com.google.common.base.Preconditions;
 import java.io.IOException;
+import java.util.Iterator;
+import java.util.Map.Entry;
 import java.util.Properties;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -21,6 +40,17 @@ import org.threeten.bp.Duration;
 
 @RunWith(JUnit4.class)
 public class MainTest {
+
+  @After
+  public void removeScepSystemProperties() {
+    Iterator<Entry<Object, Object>> it = System.getProperties().entrySet().iterator();
+    while (it.hasNext()) {
+      Entry<Object, Object> entry = it.next();
+      if (entry.getKey().toString().startsWith("scep")) {
+        it.remove();
+      }
+    }
+  }
 
   static Properties createMinimalProperties() {
     Properties props = new Properties();
@@ -141,6 +171,25 @@ public class MainTest {
     assertThat(watcher.getDatabaseId()).isEqualTo(db);
     Main.createPublisher(config, watcher, mock(DatabaseClient.class));
     spanner.close();
+  }
+
+  @Test
+  public void testReadConfigFromFile() throws IOException {
+    System.setProperty(prefix("properties"), "src/main/resources/scep.properties.example");
+    // Override the example credentials in the example file to prevent IOExceptions.
+    System.setProperty(prefix("spanner.credentials"), "src/test/resources/test-credentials.json");
+    System.setProperty(prefix("pubsub.credentials"), "src/test/resources/test-credentials.json");
+    Properties props = Main.readPropertiesFromFile();
+    Configuration config = createConfiguration(props);
+    assertThat(config.getMaxWaitForShutdownSeconds()).isEqualTo(20L);
+    assertThat(config.getSpannerProject()).isEqualTo("my-project");
+    assertThat(config.getDatabaseId())
+        .isEqualTo(DatabaseId.of("my-project", "my-instance", "my-database"));
+    assertThat(config.isAllTables()).isFalse();
+    assertThat(config.getIncludedTables()).asList().containsExactly("TABLE1", "TABLE2", "TABLE3");
+    assertThat(config.getPollInterval()).isEqualTo(Duration.ofMillis(500L));
+    assertThat(config.getPubsubProject()).isEqualTo("my-pubsub-project");
+    assertThat(config.getTopicNameFormat()).isEqualTo("spanner-update-%%database%%-%%table%%");
   }
 
   void expectInvalid(Properties properties) throws IOException {
