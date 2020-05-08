@@ -1,15 +1,13 @@
 # Spanner Change Watcher
 
-*Under construction, please check back later!*
-
 ## Introduction
-Spanner Change Watcher watches Spanner databases and table for changes and
-emits events when these are detected. This framework can be included in a user
-application and used to trigger functionality or processes in that application
-based on data change events.
+Spanner Change Watcher watches Spanner databases and tables for changes and
+emits events when changes are detected. This framework can be included in an
+existing application and used to trigger functionality or processes in that
+application based on data change events.
 
 ## Example Usage
-Spanner Change Watcher can be used to watch both single tables, a set of tables
+Spanner Change Watcher can be used to watch both single tables, a set of tables,
 or entire databases. Add the following dependency to your project:
 
 ```xml

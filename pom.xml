@@ -32,6 +32,12 @@
         <groupId>com.google.cloud</groupId>
         <artifactId>google-cloud-spanner-change-watcher</artifactId>
         <version>0.0.1-SNAPSHOT</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.conscrypt</groupId>
+            <artifactId>conscrypt-openjdk-uber</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.google.cloud</groupId>
@@ -57,6 +63,12 @@
         <version>${spanner.test.version}</version>
         <type>test-jar</type>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.conscrypt</groupId>
+            <artifactId>conscrypt-openjdk-uber</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       
       <dependency>
