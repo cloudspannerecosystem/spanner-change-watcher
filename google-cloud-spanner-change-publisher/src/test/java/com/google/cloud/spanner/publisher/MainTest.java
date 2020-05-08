@@ -182,14 +182,14 @@ public class MainTest {
     Properties props = Main.readPropertiesFromFile();
     Configuration config = createConfiguration(props);
     assertThat(config.getMaxWaitForShutdownSeconds()).isEqualTo(20L);
-    assertThat(config.getSpannerProject()).isEqualTo("my-project");
+    assertThat(config.getSpannerProject()).isEqualTo("my-spanner-project");
     assertThat(config.getDatabaseId())
-        .isEqualTo(DatabaseId.of("my-project", "my-instance", "my-database"));
+        .isEqualTo(DatabaseId.of("my-spanner-project", "my-instance", "my-database"));
     assertThat(config.isAllTables()).isFalse();
     assertThat(config.getIncludedTables()).asList().containsExactly("TABLE1", "TABLE2", "TABLE3");
     assertThat(config.getPollInterval()).isEqualTo(Duration.ofMillis(500L));
     assertThat(config.getPubsubProject()).isEqualTo("my-pubsub-project");
-    assertThat(config.getTopicNameFormat()).isEqualTo("spanner-update-%%database%%-%%table%%");
+    assertThat(config.getTopicNameFormat()).isEqualTo("spanner-update-%database%-%table%");
   }
 
   void expectInvalid(Properties properties) throws IOException {

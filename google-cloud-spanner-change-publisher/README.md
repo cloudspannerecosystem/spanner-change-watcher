@@ -134,6 +134,58 @@ The `spanner-publisher.jar` contains a complete example of all possible
 parameters in the root of the .jar named `scep.properties.example`.
 
 
+## Subscribe to Changes from Pubsub
+Any application can subscribe to the changes that are published to Pubsub and
+take any appropriate action based on the data that is received.
+
+```java
+String instance = "my-instance";
+String database = "my-database";
+String subscription = "projects/my-project/subscriptions/my-subscription";
+
+// Create a Spanner client as we need this to decode the Avro records.
+Spanner spanner = SpannerOptions.getDefaultInstance().getService();
+DatabaseId databaseId = DatabaseId.of(SpannerOptions.getDefaultProjectId(), instance, database);
+DatabaseClient client = spanner.getDatabaseClient(databaseId);
+
+// Keep a cache of converters from Avro to Spanner as these are expensive to create.
+Map<TableId, SpannerToAvro> converters = new HashMap<>();
+// Start a subscriber.
+Subscriber subscriber =
+    Subscriber.newBuilder(
+            ProjectSubscriptionName.of(pubsubProjectId, subscription),
+            new MessageReceiver() {
+              @Override
+              public void receiveMessage(PubsubMessage message, AckReplyConsumer consumer) {
+                // Get the change metadata.
+                DatabaseId database = DatabaseId.of(message.getAttributesOrThrow("Database"));
+                TableId table = TableId.of(database, message.getAttributesOrThrow("Table"));
+                Timestamp commitTimestamp =
+                    Timestamp.parseTimestamp(message.getAttributesOrThrow("Timestamp"));
+                // Get the changed row and decode the data.
+                SpannerToAvro converter = converters.get(table);
+                if (converter == null) {
+                  converter = new SpannerToAvro(client, table);
+                }
+                try {
+                  GenericRecord record = converter.decodeRecord(message.getData());
+                  System.out.println("--- Received changed record ---");
+                  System.out.printf("Database: %s%n", database);
+                  System.out.printf("Table: %s%n", table);
+                  System.out.printf("Commit timestamp: %s%n", commitTimestamp);
+                  System.out.printf("Data: %s%n", record);
+                } catch (Exception e) {
+                  System.err.printf("Failed to decode avro record: %s%n", e.getMessage());
+                } finally {
+                  consumer.ack();
+                }
+              }
+            })
+        .build();
+subscriber.startAsync().awaitRunning();
+```
+
+
 ## Support Level
 Please feel free to report issues and send pull requests, but note that this
 application is not officially supported as part of the Cloud Spanner product.

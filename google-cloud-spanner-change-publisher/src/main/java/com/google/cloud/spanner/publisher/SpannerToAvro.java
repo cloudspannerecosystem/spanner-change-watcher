@@ -16,7 +16,6 @@
 
 package com.google.cloud.spanner.publisher;
 
-import com.google.api.core.InternalApi;
 import com.google.cloud.ByteArray;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.ResultSet;
@@ -47,14 +46,16 @@ import java.util.logging.Logger;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaBuilder;
 import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.BinaryEncoder;
 import org.apache.avro.io.DatumWriter;
+import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.EncoderFactory;
 
-/** Converts schema and data from Spanner to Avro. */
-@InternalApi
+/** Converts schema and data from Spanner to Avro and back. */
 public class SpannerToAvro {
   private static final Logger logger = Logger.getLogger(SpannerToAvro.class.getName());
   private static final ByteBufAllocator alloc = PooledByteBufAllocator.DEFAULT;
@@ -70,8 +71,14 @@ public class SpannerToAvro {
   private final TableId table;
   private final Statement statement;
   private final SchemaSet schemaSet;
+  private GenericDatumReader<GenericRecord> datumReader;
+  private BinaryDecoder lastDecoder;
+  private GenericRecord lastDecodedRecord;
 
-  @InternalApi
+  /**
+   * Create a {@link SpannerToAvro} instance for the given table. The {@link DatabaseClient} must be
+   * for the database that contains the table.
+   */
   public SpannerToAvro(DatabaseClient client, TableId table) {
     this.client = client;
     this.table = table;
@@ -434,7 +441,7 @@ public class SpannerToAvro {
     return SchemaSet.create(avroSchema, ImmutableMap.copyOf(spannerSchema), tsColName);
   }
 
-  @InternalApi
+  /** Creates an Avro record from a Spanner {@link StructReader} (i.e. {@link ResultSet}). */
   public ByteString makeRecord(StructReader row) {
     //    final ByteBuf bb = Unpooled.directBuffer();
     final ByteBuf bb = alloc.directBuffer(1024); // fix this
@@ -564,6 +571,16 @@ public class SpannerToAvro {
     }
 
     return null;
+  }
+
+  /** Decode the given binary data as a */
+  public GenericRecord decodeRecord(ByteString data) throws IOException {
+    lastDecoder = DecoderFactory.get().binaryDecoder(data.newInput(), lastDecoder);
+    if (datumReader == null) {
+      datumReader = new GenericDatumReader<>(schemaSet.avroSchema);
+    }
+    lastDecodedRecord = datumReader.read(lastDecodedRecord, lastDecoder);
+    return lastDecodedRecord;
   }
 
   private static <T> Collection<String> toStringCollection(Collection<T> objects) {

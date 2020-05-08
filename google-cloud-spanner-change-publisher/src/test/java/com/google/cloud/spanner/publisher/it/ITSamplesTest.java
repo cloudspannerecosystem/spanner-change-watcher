@@ -489,4 +489,55 @@ public class ITSamplesTest {
       System.setSecurityManager(currentSecurityManager);
     }
   }
+
+  @Test
+  public void testSubscribeToChanges() throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    Samples samples =
+        new Samples(
+            SpannerTestHelper.getSpannerProjectId(),
+            SpannerTestHelper.getSpannerCredentials(),
+            PubsubTestHelper.getPubsubProjectId(),
+            PubsubTestHelper.getPubsubCredentials());
+    Future<String> out =
+        runSample(
+            () -> {
+              samples.subscribeToChanges(
+                  databaseId.getInstanceId().getInstance(),
+                  databaseId.getDatabase(),
+                  env.topicId,
+                  env.subscriptionId);
+            },
+            latch);
+    assertThat(latch.await(60L, TimeUnit.SECONDS)).isTrue();
+
+    // First write to the table without a commit timestamp. These changes should not be picked up.
+    client.write(
+        insertOrUpdateNumbers(
+            "NUMBERS_WITHOUT_COMMIT_TIMESTAMP", 0, NUMBER_NAMES.length, Timestamp.now()));
+    Timestamp commitTs1 =
+        client.write(insertOrUpdateNumbers("NUMBERS1", 0, 1, Value.COMMIT_TIMESTAMP));
+    Timestamp commitTs2 =
+        client.write(
+            insertOrUpdateNumbers("NUMBERS2", 1, NUMBER_NAMES.length, Value.COMMIT_TIMESTAMP));
+    String res = out.get(60L, TimeUnit.SECONDS);
+
+    TableId table1 = TableId.of(databaseId, "NUMBERS1");
+    SpannerToAvro converter1 = new SpannerToAvro(client, table1);
+    for (Struct row : numberRows(commitTs1, 0, 1)) {
+      assertThat(res).contains(String.format("Table: %s%n", table1));
+      assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs1));
+      ByteString record = converter1.makeRecord(row);
+      assertThat(res).contains(String.format("Data: %s%n", converter1.decodeRecord(record)));
+    }
+    TableId table2 = TableId.of(databaseId, "NUMBERS2");
+    SpannerToAvro converter2 = new SpannerToAvro(client, table2);
+    for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
+      assertThat(res).contains(String.format("Table: %s%n", table2));
+      assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs2));
+      ByteString record = converter2.makeRecord(row);
+      assertThat(res).contains(String.format("Data: %s%n", converter2.decodeRecord(record)));
+    }
+    assertThat(res).doesNotContain("NUMBERS_WITHOUT_COMMIT_TIMESTAMP");
+  }
 }
