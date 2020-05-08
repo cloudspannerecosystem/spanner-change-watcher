@@ -19,10 +19,14 @@ package com.google.cloud.spanner.publisher;
 import com.google.api.core.ApiService;
 import com.google.api.core.ApiService.Listener;
 import com.google.api.core.ApiService.State;
+import com.google.api.gax.core.FixedCredentialsProvider;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.ServiceOptions;
 import com.google.cloud.Timestamp;
+import com.google.cloud.pubsub.v1.AckReplyConsumer;
+import com.google.cloud.pubsub.v1.MessageReceiver;
+import com.google.cloud.pubsub.v1.Subscriber;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.DatabaseId;
 import com.google.cloud.spanner.Spanner;
@@ -34,8 +38,13 @@ import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerTableTailer;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.pubsub.v1.ProjectSubscriptionName;
+import com.google.pubsub.v1.PubsubMessage;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import org.apache.avro.generic.GenericRecord;
 
 /** Samples for spanner-change-publisher. */
 public class Samples {
@@ -313,5 +322,79 @@ public class Samples {
     latch.await();
     // Stop the publisher and wait for it to release all resources.
     eventPublisher.stopAsync().awaitTerminated();
+  }
+
+  /** Subscribe to the changes on Pubsub. */
+  public void subscribeToChanges(
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String topic, // "my-topic"
+      String subscription // "my-subscription" subscribing to "my-topic"
+      ) throws IOException, InterruptedException {
+    // Setup Spanner change watcher.
+    Spanner spanner =
+        SpannerOptions.newBuilder()
+            .setProjectId(spannerProjectId)
+            .setCredentials(spannerCredentials)
+            .build()
+            .getService();
+    DatabaseId databaseId = DatabaseId.of(spannerProjectId, instance, database);
+    SpannerDatabaseChangeWatcher watcher =
+        SpannerDatabaseTailer.newBuilder(spanner, databaseId).allTables().build();
+
+    // Setup Spanner change publisher.
+    final CountDownLatch latch = new CountDownLatch(3);
+    DatabaseClient client = spanner.getDatabaseClient(databaseId);
+    SpannerDatabaseChangeEventPublisher eventPublisher =
+        SpannerDatabaseChangeEventPublisher.newBuilder(watcher, client)
+            .setTopicNameFormat(String.format("projects/%s/topics/%s", pubsubProjectId, topic))
+            .setCredentials(pubsubCredentials)
+            .build();
+    // Start the change publisher. This will automatically also start the change watcher.
+    eventPublisher.startAsync().awaitRunning();
+    System.out.println("Change publisher started");
+
+    // Start a subscriber.
+    Map<TableId, SpannerToAvro> converters = new HashMap<>();
+    Subscriber subscriber =
+        Subscriber.newBuilder(
+                ProjectSubscriptionName.of(pubsubProjectId, subscription),
+                new MessageReceiver() {
+                  @Override
+                  public void receiveMessage(PubsubMessage message, AckReplyConsumer consumer) {
+                    // Get the change metadata.
+                    DatabaseId database = DatabaseId.of(message.getAttributesOrThrow("Database"));
+                    TableId table = TableId.of(database, message.getAttributesOrThrow("Table"));
+                    Timestamp commitTimestamp =
+                        Timestamp.parseTimestamp(message.getAttributesOrThrow("Timestamp"));
+                    // Get the changed row.
+                    SpannerToAvro converter = converters.get(table);
+                    if (converter == null) {
+                      converter = new SpannerToAvro(client, table);
+                    }
+                    try {
+                      GenericRecord record = converter.decodeRecord(message.getData());
+                      System.out.println("--- Received changed record ---");
+                      System.out.printf("Database: %s%n", database);
+                      System.out.printf("Table: %s%n", table);
+                      System.out.printf("Commit timestamp: %s%n", commitTimestamp);
+                      System.out.printf("Data: %s%n", record);
+                    } catch (Exception e) {
+                      System.err.printf("Failed to decode avro record: %s%n", e.getMessage());
+                    } finally {
+                      consumer.ack();
+                      latch.countDown();
+                    }
+                  }
+                })
+            .setCredentialsProvider(FixedCredentialsProvider.create(pubsubCredentials))
+            .build();
+    subscriber.startAsync().awaitRunning();
+
+    // Wait until we have received 3 changes.
+    latch.await();
+    // Stop the publisher and subscriber and wait for them to release all resources.
+    eventPublisher.stopAsync().awaitTerminated();
+    subscriber.stopAsync().awaitTerminated();
   }
 }
