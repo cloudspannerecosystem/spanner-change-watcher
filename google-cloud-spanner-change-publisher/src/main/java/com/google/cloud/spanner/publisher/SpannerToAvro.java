@@ -573,7 +573,10 @@ public class SpannerToAvro {
     return null;
   }
 
-  /** Decode the given binary data as a */
+  /**
+   * Decode the given binary data to a {@link GenericRecord}. The data must conform to the schema of
+   * this converter.
+   */
   public GenericRecord decodeRecord(ByteString data) throws IOException {
     lastDecoder = DecoderFactory.get().binaryDecoder(data.newInput(), lastDecoder);
     if (datumReader == null) {
