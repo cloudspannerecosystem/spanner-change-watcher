@@ -32,6 +32,7 @@ import com.google.cloud.spanner.DatabaseId;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishListener;
+import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerDatabaseTailer;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher;
@@ -333,8 +334,9 @@ public class Samples {
     eventPublisher.startAsync().awaitRunning();
     System.out.println("Change publisher started");
 
-    // Keep a cache of converters from Avro to Spanner as these are expensive to create.
+    // Keep a cache of converters as these are expensive to create.
     Map<TableId, SpannerToAvro> converters = new HashMap<>();
+    SpannerToAvroFactory factory = new SpannerToAvroFactory();
     // Start a subscriber.
     Subscriber subscriber =
         Subscriber.newBuilder(
@@ -350,7 +352,8 @@ public class Samples {
                     // Get the changed row and decode the data.
                     SpannerToAvro converter = converters.get(table);
                     if (converter == null) {
-                      converter = new SpannerToAvro(client, table);
+                      converter = factory.create(client, table);
+                      converters.put(table, converter);
                     }
                     try {
                       GenericRecord record = converter.decodeRecord(message.getData());

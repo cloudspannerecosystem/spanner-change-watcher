@@ -32,7 +32,8 @@ import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.publisher.Samples;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher;
-import com.google.cloud.spanner.publisher.SpannerToAvro;
+import com.google.cloud.spanner.publisher.SpannerToAvroFactory;
+import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro;
 import com.google.cloud.spanner.publisher.it.PubsubTestHelper.ITPubsubEnv;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.cloud.spanner.watcher.it.SpannerTestHelper;
@@ -257,12 +258,12 @@ public class ITSamplesTest {
     assertThat(receivedMessagesLatch.await(30L, TimeUnit.SECONDS)).isTrue();
 
     TableId table = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter = new SpannerToAvro(client, table);
+    SpannerToAvro converter = new SpannerToAvroFactory().create(client, table);
     for (Struct row : numberRows(commitTs, 0, NUMBER_NAMES.length)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table, commitTs.toString()));
-      ByteString record = converter.makeRecord(row);
+      ByteString record = converter.convert(row);
       assertThat(receivedRows).contains(record);
     }
     subscriber.stopAsync().awaitTerminated();
@@ -319,21 +320,21 @@ public class ITSamplesTest {
     assertThat(receivedMessagesLatch.await(30L, TimeUnit.SECONDS)).isTrue();
 
     TableId table1 = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter1 = new SpannerToAvro(client, table1);
+    SpannerToAvro converter1 = new SpannerToAvroFactory().create(client, table1);
     for (Struct row : numberRows(commitTs1, 0, 1)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table1, commitTs1.toString()));
-      ByteString record = converter1.makeRecord(row);
+      ByteString record = converter1.convert(row);
       assertThat(receivedRows).contains(record);
     }
     TableId table2 = TableId.of(databaseId, "NUMBERS2");
-    SpannerToAvro converter2 = new SpannerToAvro(client, table2);
+    SpannerToAvro converter2 = new SpannerToAvroFactory().create(client, table2);
     for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table2, commitTs2.toString()));
-      ByteString record = converter2.makeRecord(row);
+      ByteString record = converter2.convert(row);
       assertThat(receivedRows).contains(record);
     }
     assertThat(res).doesNotContain("NUMBERS_WITHOUT_COMMIT_TIMESTAMP");
@@ -419,22 +420,22 @@ public class ITSamplesTest {
     assertThat(receivedMessagesLatch.await(30L, TimeUnit.SECONDS)).isTrue();
 
     TableId table1 = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter1 = new SpannerToAvro(client, table1);
+    SpannerToAvro converter1 = new SpannerToAvroFactory().create(client, table1);
     for (Struct row : numberRows(commitTs1, 0, 1)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table1, commitTs1.toString()));
-      ByteString record = converter1.makeRecord(row);
+      ByteString record = converter1.convert(row);
       assertThat(receivedRows1).contains(record);
       assertThat(receivedRows2).doesNotContain(record);
     }
     TableId table2 = TableId.of(databaseId, "NUMBERS2");
-    SpannerToAvro converter2 = new SpannerToAvro(client, table2);
+    SpannerToAvro converter2 = new SpannerToAvroFactory().create(client, table2);
     for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table2, commitTs2.toString()));
-      ByteString record = converter2.makeRecord(row);
+      ByteString record = converter2.convert(row);
       assertThat(receivedRows1).doesNotContain(record);
       assertThat(receivedRows2).contains(record);
     }
@@ -525,19 +526,19 @@ public class ITSamplesTest {
     String res = out.get(60L, TimeUnit.SECONDS);
 
     TableId table1 = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter1 = new SpannerToAvro(client, table1);
+    SpannerToAvro converter1 = new SpannerToAvroFactory().create(client, table1);
     for (Struct row : numberRows(commitTs1, 0, 1)) {
       assertThat(res).contains(String.format("Table: %s%n", table1));
       assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs1));
-      ByteString record = converter1.makeRecord(row);
+      ByteString record = converter1.convert(row);
       assertThat(res).contains(String.format("Data: %s%n", converter1.decodeRecord(record)));
     }
     TableId table2 = TableId.of(databaseId, "NUMBERS2");
-    SpannerToAvro converter2 = new SpannerToAvro(client, table2);
+    SpannerToAvro converter2 = new SpannerToAvroFactory().create(client, table2);
     for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
       assertThat(res).contains(String.format("Table: %s%n", table2));
       assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs2));
-      ByteString record = converter2.makeRecord(row);
+      ByteString record = converter2.convert(row);
       assertThat(res).contains(String.format("Data: %s%n", converter2.decodeRecord(record)));
     }
     assertThat(res).doesNotContain("NUMBERS_WITHOUT_COMMIT_TIMESTAMP");

@@ -28,6 +28,7 @@ import com.google.cloud.Timestamp;
 import com.google.cloud.pubsub.v1.Publisher;
 import com.google.cloud.pubsub.v1.stub.PublisherStubSettings;
 import com.google.cloud.spanner.DatabaseClient;
+import com.google.cloud.spanner.publisher.ConverterFactory.Converter;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishListener;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishRowChangeCallback;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
@@ -66,6 +67,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
   public static class Builder {
     private final SpannerDatabaseChangeWatcher watcher;
     private final DatabaseClient client;
+    private ConverterFactory converterFactory;
     private String topicNameFormat;
     private boolean createTopicsIfNotExist;
     private ExecutorService startStopExecutor;
@@ -77,6 +79,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
     private Builder(SpannerDatabaseChangeWatcher watcher, DatabaseClient client) {
       this.watcher = watcher;
       this.client = client;
+      this.converterFactory = new SpannerToAvroFactory();
     }
 
     /**
@@ -87,6 +90,15 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
      */
     public Builder addListener(PublishListener publishListener) {
       this.listeners.add(Preconditions.checkNotNull(publishListener));
+      return this;
+    }
+
+    /**
+     * Sets the {@link ConverterFactory} to use for this publisher. The default is a {@link
+     * SpannerToAvroFactory} converter factory.
+     */
+    public Builder setConverter(ConverterFactory factory) {
+      this.converterFactory = Preconditions.checkNotNull(factory);
       return this;
     }
 
@@ -189,6 +201,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
 
   private final DatabaseClient client;
   private final SpannerDatabaseChangeWatcher watcher;
+  private final ConverterFactory converterFactory;
   private final String topicNameFormat;
   private final boolean createTopicsIfNotExist;
   private final ExecutorService startStopExecutor;
@@ -198,11 +211,12 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
   private final String endpoint;
   private final boolean usePlainText;
   private Map<TableId, Publisher> publishers;
-  private Map<TableId, SpannerToAvro> converters;
+  private Map<TableId, Converter> converters;
 
   private SpannerDatabaseChangeEventPublisher(Builder builder) throws IOException {
     this.client = builder.client;
     this.watcher = builder.watcher;
+    this.converterFactory = builder.converterFactory;
     this.topicNameFormat = builder.topicNameFormat;
     this.createTopicsIfNotExist = builder.createTopicsIfNotExist;
     this.startStopExecutor =
@@ -272,7 +286,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
               try (PubsubHelper helper = new PubsubHelper(useCredentials, endpoint, usePlainText)) {
                 for (TableId table : watcher.getTables()) {
                   // TODO: Re-use code from SpannerTableChangeEventPublisher.
-                  converters.put(table, new SpannerToAvro(client, table));
+                  converters.put(table, converterFactory.create(client, table));
                   String topicName =
                       topicNameFormat
                           .replace("%project%", table.getDatabaseId().getInstanceId().getProject())
@@ -329,7 +343,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                     }
 
                     @Override
-                    SpannerToAvro getConverter(TableId table) {
+                    Converter getConverter(TableId table) {
                       return converters.get(table);
                     }
 

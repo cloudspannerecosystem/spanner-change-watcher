@@ -31,6 +31,7 @@ import com.google.cloud.Timestamp;
 import com.google.cloud.pubsub.v1.Publisher;
 import com.google.cloud.pubsub.v1.stub.PublisherStubSettings;
 import com.google.cloud.spanner.DatabaseClient;
+import com.google.cloud.spanner.publisher.ConverterFactory.Converter;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
@@ -77,6 +78,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
   public static class Builder {
     private final SpannerTableChangeWatcher watcher;
     private final DatabaseClient client;
+    private ConverterFactory converterFactory;
     private Publisher publisher;
     private String topicName;
     private boolean createTopicIfNotExists;
@@ -89,6 +91,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
     private Builder(SpannerTableChangeWatcher watcher, DatabaseClient client) {
       this.watcher = watcher;
       this.client = client;
+      this.converterFactory = new SpannerToAvroFactory();
     }
 
     /**
@@ -99,6 +102,15 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
      */
     public Builder addListener(PublishListener publishListener) {
       this.listeners.add(Preconditions.checkNotNull(publishListener));
+      return this;
+    }
+
+    /**
+     * Sets the {@link ConverterFactory} to use for this publisher. The default is a {@link
+     * SpannerToAvroFactory} converter factory.
+     */
+    public Builder setConverterFactory(ConverterFactory factory) {
+      this.converterFactory = Preconditions.checkNotNull(factory);
       return this;
     }
 
@@ -208,7 +220,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
       this.listeners = listeners;
     }
 
-    abstract SpannerToAvro getConverter(TableId table);
+    abstract Converter getConverter(TableId table);
 
     abstract Publisher getPublisher(TableId table);
 
@@ -225,7 +237,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
           getPublisher(table)
               .publish(
                   PubsubMessage.newBuilder()
-                      .setData(getConverter(table).makeRecord(row))
+                      .setData(getConverter(table).convert(row))
                       .putAttributes("Database", table.getDatabaseId().getName())
                       .putAttributes("Catalog", table.getCatalog())
                       .putAttributes("Schema", table.getSchema())
@@ -268,8 +280,10 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
   }
 
   private final DatabaseClient client;
+  private final ConverterFactory converterFactory;
   private final String topicName;
   private Publisher publisher;
+  private Converter converter;
   private final String endpoint;
   private final boolean usePlainText;
   private final Credentials credentials;
@@ -281,6 +295,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
 
   private SpannerTableChangeEventPublisher(Builder builder) throws IOException {
     this.client = builder.client;
+    this.converterFactory = builder.converterFactory;
     this.startStopExecutor =
         builder.startStopExecutor == null
             ? Executors.newCachedThreadPool()
@@ -304,7 +319,9 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
           @Override
           public void run() {
             try {
-              SpannerToAvro converter = new SpannerToAvro(client, watcher.getTable());
+              logger.log(Level.INFO, "Initializing converter");
+              converter = converterFactory.create(client, watcher.getTable());
+              logger.log(Level.INFO, "Finished initializing converter");
               if (publisher == null) {
                 Credentials credentialsToUse =
                     SpannerTableChangeEventPublisher.this.credentials == null && !usePlainText
@@ -359,7 +376,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
                     }
 
                     @Override
-                    SpannerToAvro getConverter(TableId table) {
+                    Converter getConverter(TableId table) {
                       return converter;
                     }
 
