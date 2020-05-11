@@ -342,17 +342,13 @@ public class ITSamplesTest {
 
   @Test
   public void testPublishChangesFromAllTablesToSeparateTopicsExample() throws Exception {
-    // First create the topics that the publishers will use and the corresponding subscriptions that
-    // can be used to listen for the changes.
+    // The topics will automatically be created by the publisher, but this ensures they are deleted
+    // after the test has run.
     // topicFormat = "change-log-%database%-%table%";
     String topic1 = String.format("change-log-%s-NUMBERS1", databaseId.getDatabase());
     String topic2 = String.format("change-log-%s-NUMBERS2", databaseId.getDatabase());
-    String subscription1 = String.format("sub-change-log-%s-NUMBERS1", databaseId.getDatabase());
-    String subscription2 = String.format("sub-change-log-%s-NUMBERS2", databaseId.getDatabase());
-    env.createTestTopic(topic1);
-    env.createTestTopic(topic2);
-    env.createTestSubscription(topic1, subscription1);
-    env.createTestSubscription(topic2, subscription2);
+    env.registerTestTopic(topic1);
+    env.registerTestTopic(topic2);
 
     CountDownLatch latch = new CountDownLatch(1);
     Samples samples =
@@ -369,6 +365,12 @@ public class ITSamplesTest {
             },
             latch);
     assertThat(latch.await(60L, TimeUnit.SECONDS)).isTrue();
+
+    String subscription1 = String.format("sub-change-log-%s-NUMBERS1", databaseId.getDatabase());
+    String subscription2 = String.format("sub-change-log-%s-NUMBERS2", databaseId.getDatabase());
+    // Create a couple of subscriptions to get the published changes.
+    env.createTestSubscription(topic1, subscription1);
+    env.createTestSubscription(topic2, subscription2);
 
     final CountDownLatch receivedMessagesLatch = new CountDownLatch(3);
     final List<ByteString> receivedRows1 = new ArrayList<>(3);

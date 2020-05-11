@@ -178,7 +178,10 @@ public class Samples {
     eventPublisher.stopAsync().awaitTerminated();
   }
 
-  /** Publish changes from all tables in a database to a separate Pubsub topic per table. */
+  /**
+   * Publish changes from all tables in a database to a separate Pubsub topic per table. The topics
+   * are created automatically by the Publisher.
+   */
   public void publishChangesFromAllTablesToSeparateTopicsExample(
       String instance, // "my-instance"
       String database // "my-database"
@@ -204,6 +207,7 @@ public class Samples {
         SpannerDatabaseChangeEventPublisher.newBuilder(watcher, client)
             .setTopicNameFormat(
                 String.format("projects/%s/topics/%s", pubsubProjectId, topicFormat))
+            .setCreateTopicsIfNotExist(true)
             .addListener(
                 new PublishListener() {
                   @Override

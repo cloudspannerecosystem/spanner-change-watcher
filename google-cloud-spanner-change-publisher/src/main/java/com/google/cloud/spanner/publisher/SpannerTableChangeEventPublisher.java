@@ -79,6 +79,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
     private final DatabaseClient client;
     private Publisher publisher;
     private String topicName;
+    private boolean createTopicIfNotExists;
     private ExecutorService startStopExecutor;
     private List<PublishListener> listeners = new ArrayList<>();
     private Credentials credentials;
@@ -107,6 +108,16 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
           publisher == null,
           "Set either the Publisher or the TopicName and Credentials, but not both.");
       this.topicName = Preconditions.checkNotNull(topicName);
+      return this;
+    }
+
+    /**
+     * Sets whether the topic where the changes should be published should automatically be created
+     * if it does not already exist. Setting this to true requires the Pubsub credentials that are
+     * being used to have permission to create topics for the selected Google Cloud Project.
+     */
+    public Builder setCreateTopicIfNotExists(boolean create) {
+      this.createTopicIfNotExists = create;
       return this;
     }
 
@@ -256,25 +267,31 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
     }
   }
 
-  private final Builder builder;
   private final DatabaseClient client;
+  private final String topicName;
   private Publisher publisher;
+  private final String endpoint;
+  private final boolean usePlainText;
+  private final Credentials credentials;
+  private final boolean createTopicIfNotExist;
   private final ImmutableList<PublishListener> listeners;
   private final ExecutorService startStopExecutor;
   private final boolean isOwnedExecutor;
   private final SpannerTableChangeWatcher watcher;
 
   private SpannerTableChangeEventPublisher(Builder builder) throws IOException {
-    this.builder = builder;
     this.client = builder.client;
     this.startStopExecutor =
         builder.startStopExecutor == null
             ? Executors.newCachedThreadPool()
             : builder.startStopExecutor;
     this.isOwnedExecutor = builder.startStopExecutor == null;
-    if (builder.publisher != null) {
-      this.publisher = builder.publisher;
-    }
+    this.topicName = builder.topicName;
+    this.publisher = builder.publisher;
+    this.endpoint = builder.endpoint;
+    this.usePlainText = builder.usePlainText;
+    this.credentials = builder.credentials;
+    this.createTopicIfNotExist = builder.createTopicIfNotExists;
     this.listeners = ImmutableList.copyOf(builder.listeners);
     this.watcher = builder.watcher;
   }
@@ -289,25 +306,25 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
             try {
               SpannerToAvro converter = new SpannerToAvro(client, watcher.getTable());
               if (publisher == null) {
-                Credentials credentials =
-                    builder.credentials == null
+                Credentials credentialsToUse =
+                    SpannerTableChangeEventPublisher.this.credentials == null
                         ? GoogleCredentials.getApplicationDefault()
-                        : builder.credentials;
-                if (credentials == null) {
+                        : SpannerTableChangeEventPublisher.this.credentials;
+                if (credentialsToUse == null) {
                   throw new IllegalArgumentException(
-                      "There is no credentials set on the builder, and the environment has no default credentials set.");
+                      "There is no credentials set on the builder, and the environment has no default credentials.");
                 }
                 try (PubsubHelper helper =
-                    new PubsubHelper(credentials, builder.endpoint, builder.usePlainText)) {
-                  helper.checkExists(builder.topicName);
+                    new PubsubHelper(credentialsToUse, endpoint, usePlainText)) {
+                  helper.checkExists(topicName, createTopicIfNotExist);
                 }
                 Publisher.Builder publisherBuilder =
-                    Publisher.newBuilder(builder.topicName)
-                        .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
-                        .setEndpoint(builder.endpoint);
-                if (builder.usePlainText) {
+                    Publisher.newBuilder(topicName)
+                        .setCredentialsProvider(FixedCredentialsProvider.create(credentialsToUse))
+                        .setEndpoint(endpoint);
+                if (usePlainText) {
                   ManagedChannel channel =
-                      ManagedChannelBuilder.forTarget(builder.endpoint).usePlaintext().build();
+                      ManagedChannelBuilder.forTarget(endpoint).usePlaintext().build();
                   publisherBuilder.setChannelProvider(
                       FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel)));
                   publisherBuilder.setCredentialsProvider(NoCredentialsProvider.create());
