@@ -46,8 +46,9 @@ class Configuration {
 
   // Publisher settings.
   private String pubsubProject;
-  private String topicNameFormat;
   private Credentials pubsubCredentials;
+  private String topicNameFormat;
+  private boolean createTopics;
 
   Long getMaxWaitForShutdownSeconds() {
     return maxWaitForShutdownSeconds;
@@ -86,6 +87,10 @@ class Configuration {
 
   String getTopicNameFormat() {
     return topicNameFormat;
+  }
+
+  boolean createTopics() {
+    return createTopics;
   }
 
   String getPubsubProject() {
@@ -196,6 +201,10 @@ class Configuration {
       throw new IllegalArgumentException(
           "Invalid configuration: pubsub.topicNameFormat is required.");
     }
+    config.createTopics =
+        Boolean.valueOf(
+            MoreObjects.firstNonNull(
+                getSystemOrDefaultProperty("pubsub.createTopics", defaults), "false"));
 
     return config;
   }

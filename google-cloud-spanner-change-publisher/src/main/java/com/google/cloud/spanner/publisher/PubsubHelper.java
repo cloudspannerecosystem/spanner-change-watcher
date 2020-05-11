@@ -28,8 +28,12 @@ import com.google.cloud.pubsub.v1.TopicAdminSettings;
 import io.grpc.ManagedChannelBuilder;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 class PubsubHelper implements AutoCloseable {
+  private static final Logger logger = Logger.getLogger(PubsubHelper.class.getName());
+
   private final TopicAdminClient client;
   private final GrpcTransportChannel channel;
 
@@ -65,10 +69,16 @@ class PubsubHelper implements AutoCloseable {
     client.awaitTermination(15L, TimeUnit.SECONDS);
   }
 
-  void checkExists(String topicName) throws Exception {
+  void checkExists(String topicName, boolean createIfNotExists) throws Exception {
     try {
       client.getTopic(topicName);
     } catch (ApiException e) {
+      if (e.getStatusCode().getCode() == Code.NOT_FOUND && createIfNotExists) {
+        logger.log(Level.INFO, "Creating topic {0}", topicName);
+        client.createTopic(topicName);
+        logger.log(Level.INFO, "Successfully created topic {0}", topicName);
+        return;
+      }
       // Ignore PERMISSION_DENIED as it could be that the user only has permission to publish
       // messages, but not see topics.
       if (e.getStatusCode().getCode() != Code.PERMISSION_DENIED) {

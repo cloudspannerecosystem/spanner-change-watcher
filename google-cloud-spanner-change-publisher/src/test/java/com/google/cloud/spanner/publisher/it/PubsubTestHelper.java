@@ -76,6 +76,10 @@ public final class PubsubTestHelper {
       logger.info(String.format("Created topic %s", topic));
     }
 
+    public void registerTestTopic(String topic) {
+      topics.add(topic);
+    }
+
     public void createTestSubscription(String topic, String subscription) {
       subAdminClient.createSubscription(
           String.format(

@@ -67,6 +67,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
     private final SpannerDatabaseChangeWatcher watcher;
     private final DatabaseClient client;
     private String topicNameFormat;
+    private boolean createTopicsIfNotExist;
     private ExecutorService startStopExecutor;
     private List<PublishListener> listeners = new ArrayList<>();
     private Credentials credentials;
@@ -109,6 +110,17 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
      */
     public Builder setTopicNameFormat(String topicNameFormat) {
       this.topicNameFormat = Preconditions.checkNotNull(topicNameFormat);
+      return this;
+    }
+
+    /**
+     * Sets whether the topic(s) where the changes should be published should automatically be
+     * created if it/they do(es) not already exist. Setting this to true requires the Pubsub
+     * credentials that are being used to have permission to create topics for the selected Google
+     * Cloud Project.
+     */
+    public Builder setCreateTopicsIfNotExist(boolean create) {
+      this.createTopicsIfNotExist = create;
       return this;
     }
 
@@ -178,6 +190,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
   private final DatabaseClient client;
   private final SpannerDatabaseChangeWatcher watcher;
   private final String topicNameFormat;
+  private final boolean createTopicsIfNotExist;
   private final ExecutorService startStopExecutor;
   private final ImmutableList<PublishListener> listeners;
   private final boolean isOwnedExecutor;
@@ -191,6 +204,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
     this.client = builder.client;
     this.watcher = builder.watcher;
     this.topicNameFormat = builder.topicNameFormat;
+    this.createTopicsIfNotExist = builder.createTopicsIfNotExist;
     this.startStopExecutor =
         builder.startStopExecutor == null
             ? Executors.newCachedThreadPool()
@@ -267,7 +281,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
                           .replace("%schema%", table.getSchema())
                           .replace("%table%", table.getTable());
                   // Check that the given topic exists.
-                  helper.checkExists(topicName);
+                  helper.checkExists(topicName, createTopicsIfNotExist);
                   Publisher.Builder publisherBuilder =
                       Publisher.newBuilder(topicName)
                           .setCredentialsProvider(FixedCredentialsProvider.create(useCredentials))
