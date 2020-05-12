@@ -59,11 +59,13 @@ class Configuration {
   }
 
   String getSpannerProject() {
-    return MoreObjects.firstNonNull(spannerProject, ServiceOptions.getDefaultProjectId());
+    return spannerProject != null ? spannerProject : ServiceOptions.getDefaultProjectId();
   }
 
   Credentials getSpannerCredentials() throws IOException {
-    return MoreObjects.firstNonNull(spannerCredentials, GoogleCredentials.getApplicationDefault());
+    return spannerCredentials != null
+        ? spannerCredentials
+        : GoogleCredentials.getApplicationDefault();
   }
 
   boolean isAllTables() {
@@ -94,11 +96,13 @@ class Configuration {
   }
 
   String getPubsubProject() {
-    return MoreObjects.firstNonNull(pubsubProject, ServiceOptions.getDefaultProjectId());
+    return pubsubProject != null ? pubsubProject : ServiceOptions.getDefaultProjectId();
   }
 
   Credentials getPubsubCredentials() throws IOException {
-    return MoreObjects.firstNonNull(pubsubCredentials, GoogleCredentials.getApplicationDefault());
+    return pubsubCredentials != null
+        ? pubsubCredentials
+        : GoogleCredentials.getApplicationDefault();
   }
 
   static String prefix(String s) {
