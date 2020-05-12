@@ -307,10 +307,10 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
               SpannerToAvro converter = new SpannerToAvro(client, watcher.getTable());
               if (publisher == null) {
                 Credentials credentialsToUse =
-                    SpannerTableChangeEventPublisher.this.credentials == null
+                    SpannerTableChangeEventPublisher.this.credentials == null && !usePlainText
                         ? GoogleCredentials.getApplicationDefault()
                         : SpannerTableChangeEventPublisher.this.credentials;
-                if (credentialsToUse == null) {
+                if (credentialsToUse == null && !usePlainText) {
                   throw new IllegalArgumentException(
                       "There is no credentials set on the builder, and the environment has no default credentials.");
                 }
