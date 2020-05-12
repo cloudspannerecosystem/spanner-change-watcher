@@ -25,7 +25,7 @@ public abstract class AbstractMockServerTest
     extends com.google.cloud.spanner.watcher.AbstractMockServerTest {
   // SpannerToAvro statements.
   private static final Statement SPANNER_TO_AVRO_SCHEMA_FOO_STATEMENT =
-      Statement.newBuilder(SpannerToAvro.SCHEMA_QUERY)
+      Statement.newBuilder(SpannerToAvroFactory.SCHEMA_QUERY)
           .bind("catalog")
           .to("")
           .bind("schema")
@@ -34,7 +34,7 @@ public abstract class AbstractMockServerTest
           .to("Foo")
           .build();
   private static final Statement SPANNER_TO_AVRO_SCHEMA_BAR_STATEMENT =
-      Statement.newBuilder(SpannerToAvro.SCHEMA_QUERY)
+      Statement.newBuilder(SpannerToAvroFactory.SCHEMA_QUERY)
           .bind("catalog")
           .to("")
           .bind("schema")

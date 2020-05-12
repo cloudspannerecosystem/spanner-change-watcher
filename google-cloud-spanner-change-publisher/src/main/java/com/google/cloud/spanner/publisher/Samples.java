@@ -32,12 +32,15 @@ import com.google.cloud.spanner.DatabaseId;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishListener;
+import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerDatabaseTailer;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerTableTailer;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.google.pubsub.v1.ProjectSubscriptionName;
 import com.google.pubsub.v1.PubsubMessage;
 import java.io.IOException;
@@ -333,7 +336,7 @@ public class Samples {
     eventPublisher.startAsync().awaitRunning();
     System.out.println("Change publisher started");
 
-    // Keep a cache of converters from Avro to Spanner as these are expensive to create.
+    // Keep a cache of converters as these are expensive to create.
     Map<TableId, SpannerToAvro> converters = new HashMap<>();
     // Start a subscriber.
     Subscriber subscriber =
@@ -350,7 +353,8 @@ public class Samples {
                     // Get the changed row and decode the data.
                     SpannerToAvro converter = converters.get(table);
                     if (converter == null) {
-                      converter = new SpannerToAvro(client, table);
+                      converter = SpannerToAvroFactory.INSTANCE.create(client, table);
+                      converters.put(table, converter);
                     }
                     try {
                       GenericRecord record = converter.decodeRecord(message.getData());
@@ -361,6 +365,76 @@ public class Samples {
                       System.out.printf("Data: %s%n", record);
                     } catch (Exception e) {
                       System.err.printf("Failed to decode avro record: %s%n", e.getMessage());
+                    } finally {
+                      consumer.ack();
+                      latch.countDown();
+                    }
+                  }
+                })
+            .setCredentialsProvider(FixedCredentialsProvider.create(pubsubCredentials))
+            .build();
+    subscriber.startAsync().awaitRunning();
+
+    // Wait until we have received 3 changes.
+    latch.await();
+    // Stop the publisher and subscriber and wait for them to release all resources.
+    eventPublisher.stopAsync().awaitTerminated();
+    subscriber.stopAsync().awaitTerminated();
+  }
+
+  /** Subscribe changes from Pubsub and decode JSON data. */
+  public void subscribeToChangesAsJson(
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String topic, // "my-topic"
+      String subscription // "my-subscription" subscribing to "my-topic"
+      ) throws IOException, InterruptedException {
+    // Setup Spanner change watcher.
+    Spanner spanner =
+        SpannerOptions.newBuilder()
+            .setProjectId(spannerProjectId)
+            .setCredentials(spannerCredentials)
+            .build()
+            .getService();
+    DatabaseId databaseId = DatabaseId.of(spannerProjectId, instance, database);
+    SpannerDatabaseChangeWatcher watcher =
+        SpannerDatabaseTailer.newBuilder(spanner, databaseId).allTables().build();
+
+    // Setup Spanner change publisher to publish changes in JSON format.
+    final CountDownLatch latch = new CountDownLatch(3);
+    DatabaseClient client = spanner.getDatabaseClient(databaseId);
+    SpannerDatabaseChangeEventPublisher eventPublisher =
+        SpannerDatabaseChangeEventPublisher.newBuilder(watcher, client)
+            .setTopicNameFormat(String.format("projects/%s/topics/%s", pubsubProjectId, topic))
+            .setConverterFactory(SpannerToJsonFactory.INSTANCE)
+            .setCredentials(pubsubCredentials)
+            .build();
+    // Start the change publisher. This will automatically also start the change watcher.
+    eventPublisher.startAsync().awaitRunning();
+    System.out.println("Change publisher started");
+
+    // Start a subscriber.
+    Subscriber subscriber =
+        Subscriber.newBuilder(
+                ProjectSubscriptionName.of(pubsubProjectId, subscription),
+                new MessageReceiver() {
+                  @Override
+                  public void receiveMessage(PubsubMessage message, AckReplyConsumer consumer) {
+                    // Get the change metadata.
+                    DatabaseId database = DatabaseId.of(message.getAttributesOrThrow("Database"));
+                    TableId table = TableId.of(database, message.getAttributesOrThrow("Table"));
+                    Timestamp commitTimestamp =
+                        Timestamp.parseTimestamp(message.getAttributesOrThrow("Timestamp"));
+                    // Get the changed row and decode the data.
+                    try {
+                      JsonElement json = JsonParser.parseString(message.getData().toStringUtf8());
+                      System.out.println("--- Received changed record ---");
+                      System.out.printf("Database: %s%n", database);
+                      System.out.printf("Table: %s%n", table);
+                      System.out.printf("Commit timestamp: %s%n", commitTimestamp);
+                      System.out.printf("Data: %s%n", json.toString());
+                    } catch (Exception e) {
+                      System.err.printf("Failed to parse json record: %s%n", e.getMessage());
                     } finally {
                       consumer.ack();
                       latch.countDown();

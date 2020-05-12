@@ -32,7 +32,8 @@ import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.Type;
 import com.google.cloud.spanner.Type.StructField;
-import com.google.cloud.spanner.publisher.SpannerToAvro.SchemaSet;
+import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro;
+import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro.SchemaSet;
 import com.google.cloud.spanner.watcher.SpannerUtils;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.protobuf.ByteString;
@@ -294,7 +295,7 @@ public class SpannerToAvroTest {
   @Test
   public void testConvertTableToSchemaSet() {
     SchemaSet set =
-        SpannerToAvro.convertTableToSchemaSet(
+        SpannerToAvroFactory.SpannerToAvro.convertTableToSchemaSet(
             TableId.of(DatabaseId.of("p", "i", "d"), "FOO"),
             "NAMESPACE",
             createSchemaResultSet(),
@@ -536,7 +537,7 @@ public class SpannerToAvroTest {
   }
 
   @Test
-  public void testMakeRecord() throws IOException {
+  public void testConvert() throws IOException {
     DatabaseClient client = mock(DatabaseClient.class);
     ReadContext context = mock(ReadContext.class);
     when(client.singleUse()).thenReturn(context);
@@ -551,7 +552,7 @@ public class SpannerToAvroTest {
                 .build()))
         .thenReturn(ResultSets.toAsyncResultSet(createTimestampColumnResultSet()));
     when(context.executeQuery(
-            Statement.newBuilder(SpannerToAvro.SCHEMA_QUERY)
+            Statement.newBuilder(SpannerToAvroFactory.SCHEMA_QUERY)
                 .bind("catalog")
                 .to("")
                 .bind("schema")
@@ -561,7 +562,8 @@ public class SpannerToAvroTest {
                 .build()))
         .thenReturn(createSchemaResultSet());
     SpannerToAvro converter =
-        new SpannerToAvro(client, TableId.of(DatabaseId.of("p", "i", "i"), "FOO"));
+        SpannerToAvroFactory.INSTANCE.create(
+            client, TableId.of(DatabaseId.of("p", "i", "i"), "FOO"));
 
     Struct row =
         Struct.newBuilder()
@@ -635,7 +637,7 @@ public class SpannerToAvroTest {
             .toTimestampArray(null)
             .build();
 
-    ByteString data = converter.makeRecord(row);
+    ByteString data = converter.convert(row);
     assertThat(data).isNotNull();
 
     // Read the data back in.

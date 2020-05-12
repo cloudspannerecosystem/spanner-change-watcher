@@ -31,16 +31,25 @@ import com.google.cloud.spanner.DatabaseId;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.publisher.MockPubSubServer.MockPublisherServiceImpl;
 import com.google.cloud.spanner.publisher.MockPubSubServer.MockSubscriberServiceImpl;
+import com.google.cloud.spanner.watcher.RandomResultSetGenerator;
 import com.google.cloud.spanner.watcher.SpannerCommitTimestampRepository;
 import com.google.cloud.spanner.watcher.SpannerTableTailer;
 import com.google.cloud.spanner.watcher.TableId;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.protobuf.ByteString;
 import com.google.pubsub.v1.PubsubMessage;
+import com.google.spanner.v1.StructType.Field;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -104,9 +113,9 @@ public class SpannerTableChangeEventPublisherTest extends AbstractMockServerTest
                 new MessageReceiver() {
                   @Override
                   public void receiveMessage(PubsubMessage message, AckReplyConsumer consumer) {
-                    latch.countDown();
                     receivedMessages.incrementAndGet();
                     consumer.ack();
+                    latch.countDown();
                   }
                 })
             .setChannelProvider(channelProvider)
@@ -118,7 +127,7 @@ public class SpannerTableChangeEventPublisherTest extends AbstractMockServerTest
     DatabaseId db = DatabaseId.of("p", "i", "i");
     SpannerTableTailer tailer =
         SpannerTableTailer.newBuilder(spanner, TableId.of(db, "Foo"))
-            .setPollInterval(Duration.ofSeconds(100L))
+            .setPollInterval(Duration.ofMillis(100L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, db)
                     .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
@@ -134,6 +143,72 @@ public class SpannerTableChangeEventPublisherTest extends AbstractMockServerTest
     assertThat(latch.await(10L, TimeUnit.SECONDS)).isTrue();
     publisher.stopAsync();
     assertThat(receivedMessages.get()).isEqualTo(SELECT_FOO_ROW_COUNT);
+    publisher.awaitTerminated();
+    subscriber.stopAsync().awaitTerminated();
+  }
+
+  @Test
+  public void testPublishChangesAsJson() throws Exception {
+    final AtomicInteger receivedMessages = new AtomicInteger();
+    final List<ByteString> receivedData = Collections.synchronizedList(new LinkedList<>());
+    final CountDownLatch latch = new CountDownLatch(SELECT_FOO_ROW_COUNT);
+
+    ManagedChannel channel =
+        ManagedChannelBuilder.forTarget("localhost:" + pubSubServer.getPort())
+            .usePlaintext()
+            .build();
+    TransportChannelProvider channelProvider =
+        FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel));
+    CredentialsProvider credentialsProvider = NoCredentialsProvider.create();
+    Subscriber subscriber =
+        Subscriber.newBuilder(
+                "projects/p/subscriptions/s",
+                new MessageReceiver() {
+                  @Override
+                  public void receiveMessage(PubsubMessage message, AckReplyConsumer consumer) {
+                    receivedMessages.incrementAndGet();
+                    receivedData.add(message.getData());
+                    consumer.ack();
+                    latch.countDown();
+                  }
+                })
+            .setChannelProvider(channelProvider)
+            .setCredentialsProvider(credentialsProvider)
+            .build();
+    subscriber.startAsync().awaitRunning();
+
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "i");
+    SpannerTableTailer tailer =
+        SpannerTableTailer.newBuilder(spanner, TableId.of(db, "Foo"))
+            .setPollInterval(Duration.ofMillis(100L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, db)
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    SpannerTableChangeEventPublisher publisher =
+        SpannerTableChangeEventPublisher.newBuilder(tailer, spanner.getDatabaseClient(db))
+            .usePlainText()
+            .setEndpoint("localhost:" + pubSubServer.getPort())
+            .setTopicName("projects/p/topics/foo-updates")
+            .setConverterFactory(SpannerToJsonFactory.INSTANCE)
+            .build();
+    publisher.startAsync().awaitRunning();
+    assertThat(latch.await(10L, TimeUnit.SECONDS)).isTrue();
+    publisher.stopAsync();
+    assertThat(receivedMessages.get()).isEqualTo(SELECT_FOO_ROW_COUNT);
+    for (ByteString json : receivedData) {
+      JsonElement element = JsonParser.parseString(json.toStringUtf8());
+      assertThat(element.isJsonObject()).isTrue();
+      JsonObject obj = element.getAsJsonObject();
+      assertThat(obj.size())
+          .isEqualTo(RandomResultSetGenerator.METADATA.getRowType().getFieldsCount());
+      for (Field field : RandomResultSetGenerator.METADATA.getRowType().getFieldsList()) {
+        // Null values are returned as an instance of JsonNull and not null.
+        assertThat(obj.get(field.getName())).isNotNull();
+      }
+    }
     publisher.awaitTerminated();
     subscriber.stopAsync().awaitTerminated();
   }

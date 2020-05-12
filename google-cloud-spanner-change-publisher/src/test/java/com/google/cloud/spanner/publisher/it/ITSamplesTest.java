@@ -32,11 +32,16 @@ import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.publisher.Samples;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher;
-import com.google.cloud.spanner.publisher.SpannerToAvro;
+import com.google.cloud.spanner.publisher.SpannerToAvroFactory;
+import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro;
+import com.google.cloud.spanner.publisher.SpannerToJsonFactory;
+import com.google.cloud.spanner.publisher.SpannerToJsonFactory.SpannerToJson;
 import com.google.cloud.spanner.publisher.it.PubsubTestHelper.ITPubsubEnv;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.cloud.spanner.watcher.it.SpannerTestHelper;
 import com.google.common.collect.ImmutableList;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.google.protobuf.ByteString;
 import com.google.pubsub.v1.PubsubMessage;
 import com.google.pubsub.v1.TopicName;
@@ -257,12 +262,12 @@ public class ITSamplesTest {
     assertThat(receivedMessagesLatch.await(30L, TimeUnit.SECONDS)).isTrue();
 
     TableId table = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter = new SpannerToAvro(client, table);
+    SpannerToAvro converter = SpannerToAvroFactory.INSTANCE.create(client, table);
     for (Struct row : numberRows(commitTs, 0, NUMBER_NAMES.length)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table, commitTs.toString()));
-      ByteString record = converter.makeRecord(row);
+      ByteString record = converter.convert(row);
       assertThat(receivedRows).contains(record);
     }
     subscriber.stopAsync().awaitTerminated();
@@ -319,21 +324,21 @@ public class ITSamplesTest {
     assertThat(receivedMessagesLatch.await(30L, TimeUnit.SECONDS)).isTrue();
 
     TableId table1 = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter1 = new SpannerToAvro(client, table1);
+    SpannerToAvro converter1 = SpannerToAvroFactory.INSTANCE.create(client, table1);
     for (Struct row : numberRows(commitTs1, 0, 1)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table1, commitTs1.toString()));
-      ByteString record = converter1.makeRecord(row);
+      ByteString record = converter1.convert(row);
       assertThat(receivedRows).contains(record);
     }
     TableId table2 = TableId.of(databaseId, "NUMBERS2");
-    SpannerToAvro converter2 = new SpannerToAvro(client, table2);
+    SpannerToAvro converter2 = SpannerToAvroFactory.INSTANCE.create(client, table2);
     for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table2, commitTs2.toString()));
-      ByteString record = converter2.makeRecord(row);
+      ByteString record = converter2.convert(row);
       assertThat(receivedRows).contains(record);
     }
     assertThat(res).doesNotContain("NUMBERS_WITHOUT_COMMIT_TIMESTAMP");
@@ -419,22 +424,22 @@ public class ITSamplesTest {
     assertThat(receivedMessagesLatch.await(30L, TimeUnit.SECONDS)).isTrue();
 
     TableId table1 = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter1 = new SpannerToAvro(client, table1);
+    SpannerToAvro converter1 = SpannerToAvroFactory.INSTANCE.create(client, table1);
     for (Struct row : numberRows(commitTs1, 0, 1)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table1, commitTs1.toString()));
-      ByteString record = converter1.makeRecord(row);
+      ByteString record = converter1.convert(row);
       assertThat(receivedRows1).contains(record);
       assertThat(receivedRows2).doesNotContain(record);
     }
     TableId table2 = TableId.of(databaseId, "NUMBERS2");
-    SpannerToAvro converter2 = new SpannerToAvro(client, table2);
+    SpannerToAvro converter2 = SpannerToAvroFactory.INSTANCE.create(client, table2);
     for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
       assertThat(res)
           .contains(
               String.format("Published change for table %s at %s%n", table2, commitTs2.toString()));
-      ByteString record = converter2.makeRecord(row);
+      ByteString record = converter2.convert(row);
       assertThat(receivedRows1).doesNotContain(record);
       assertThat(receivedRows2).contains(record);
     }
@@ -525,20 +530,73 @@ public class ITSamplesTest {
     String res = out.get(60L, TimeUnit.SECONDS);
 
     TableId table1 = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter1 = new SpannerToAvro(client, table1);
+    SpannerToAvro converter1 = SpannerToAvroFactory.INSTANCE.create(client, table1);
     for (Struct row : numberRows(commitTs1, 0, 1)) {
       assertThat(res).contains(String.format("Table: %s%n", table1));
       assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs1));
-      ByteString record = converter1.makeRecord(row);
+      ByteString record = converter1.convert(row);
       assertThat(res).contains(String.format("Data: %s%n", converter1.decodeRecord(record)));
     }
     TableId table2 = TableId.of(databaseId, "NUMBERS2");
-    SpannerToAvro converter2 = new SpannerToAvro(client, table2);
+    SpannerToAvro converter2 = SpannerToAvroFactory.INSTANCE.create(client, table2);
     for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
       assertThat(res).contains(String.format("Table: %s%n", table2));
       assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs2));
-      ByteString record = converter2.makeRecord(row);
+      ByteString record = converter2.convert(row);
       assertThat(res).contains(String.format("Data: %s%n", converter2.decodeRecord(record)));
+    }
+    assertThat(res).doesNotContain("NUMBERS_WITHOUT_COMMIT_TIMESTAMP");
+  }
+
+  @Test
+  public void testSubscribeToChangesAsJson() throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    Samples samples =
+        new Samples(
+            SpannerTestHelper.getSpannerProjectId(),
+            SpannerTestHelper.getSpannerCredentials(),
+            PubsubTestHelper.getPubsubProjectId(),
+            PubsubTestHelper.getPubsubCredentials());
+    Future<String> out =
+        runSample(
+            () -> {
+              samples.subscribeToChangesAsJson(
+                  databaseId.getInstanceId().getInstance(),
+                  databaseId.getDatabase(),
+                  env.topicId,
+                  env.subscriptionId);
+            },
+            latch);
+    assertThat(latch.await(60L, TimeUnit.SECONDS)).isTrue();
+
+    // First write to the table without a commit timestamp. These changes should not be picked up.
+    client.write(
+        insertOrUpdateNumbers(
+            "NUMBERS_WITHOUT_COMMIT_TIMESTAMP", 0, NUMBER_NAMES.length, Timestamp.now()));
+    Timestamp commitTs1 =
+        client.write(insertOrUpdateNumbers("NUMBERS1", 0, 1, Value.COMMIT_TIMESTAMP));
+    Timestamp commitTs2 =
+        client.write(
+            insertOrUpdateNumbers("NUMBERS2", 1, NUMBER_NAMES.length, Value.COMMIT_TIMESTAMP));
+    String res = out.get(60L, TimeUnit.SECONDS);
+
+    TableId table1 = TableId.of(databaseId, "NUMBERS1");
+    SpannerToJson converter1 = SpannerToJsonFactory.INSTANCE.create(client, table1);
+    for (Struct row : numberRows(commitTs1, 0, 1)) {
+      assertThat(res).contains(String.format("Table: %s%n", table1));
+      assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs1));
+      ByteString record = converter1.convert(row);
+      JsonElement json = JsonParser.parseString(record.toStringUtf8());
+      assertThat(res).contains(String.format("Data: %s%n", json));
+    }
+    TableId table2 = TableId.of(databaseId, "NUMBERS2");
+    SpannerToJson converter2 = SpannerToJsonFactory.INSTANCE.create(client, table2);
+    for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
+      assertThat(res).contains(String.format("Table: %s%n", table2));
+      assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs2));
+      ByteString record = converter2.convert(row);
+      JsonElement json = JsonParser.parseString(record.toStringUtf8());
+      assertThat(res).contains(String.format("Data: %s%n", json));
     }
     assertThat(res).doesNotContain("NUMBERS_WITHOUT_COMMIT_TIMESTAMP");
   }
