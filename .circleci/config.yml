@@ -15,7 +15,11 @@ jobs:
         at: ~/java-spanner
     - run:
         name: Clone and install java-spanner repository
-        command: git clone git@github.com:googleapis/java-spanner.git ~/java-spanner
+        command: |
+          git clone git@github.com:googleapis/java-spanner.git ~/java-spanner
+          cd ~/java-spanner
+          git checkout async-api
+          mvn -DskipTests clean install
     - run:
         name: Install Dependencies
         command: mvn -DskipTests clean install dependency:resolve-plugins dependency:go-offline --settings 'pom.xml'
