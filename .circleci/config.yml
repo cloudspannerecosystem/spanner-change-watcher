@@ -11,6 +11,11 @@ jobs:
         command: find . -name 'pom.xml' | sort | xargs cat > /tmp/maven_cache_seed
     - restore_cache:
         key: maven-{{ checksum "/tmp/maven_cache_seed" }}
+    - attach_workspace:
+        at: ~/java-spanner
+    - run:
+        name: Clone and install java-spanner repository
+        command: git clone git@github.com:googleapis/java-spanner.git ~/java-spanner
     - run:
         name: Install Dependencies
         command: mvn -DskipTests clean install dependency:resolve-plugins dependency:go-offline --settings 'pom.xml'
