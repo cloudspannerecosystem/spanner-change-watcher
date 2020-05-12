@@ -97,7 +97,7 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
      * Sets the {@link ConverterFactory} to use for this publisher. The default is a {@link
      * SpannerToAvroFactory} converter factory.
      */
-    public Builder setConverter(ConverterFactory factory) {
+    public Builder setConverterFactory(ConverterFactory factory) {
       this.converterFactory = Preconditions.checkNotNull(factory);
       return this;
     }
