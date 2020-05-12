@@ -258,7 +258,7 @@ public class ITSamplesTest {
     assertThat(receivedMessagesLatch.await(30L, TimeUnit.SECONDS)).isTrue();
 
     TableId table = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter = new SpannerToAvroFactory().create(client, table);
+    SpannerToAvro converter = SpannerToAvroFactory.INSTANCE.create(client, table);
     for (Struct row : numberRows(commitTs, 0, NUMBER_NAMES.length)) {
       assertThat(res)
           .contains(
@@ -320,7 +320,7 @@ public class ITSamplesTest {
     assertThat(receivedMessagesLatch.await(30L, TimeUnit.SECONDS)).isTrue();
 
     TableId table1 = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter1 = new SpannerToAvroFactory().create(client, table1);
+    SpannerToAvro converter1 = SpannerToAvroFactory.INSTANCE.create(client, table1);
     for (Struct row : numberRows(commitTs1, 0, 1)) {
       assertThat(res)
           .contains(
@@ -329,7 +329,7 @@ public class ITSamplesTest {
       assertThat(receivedRows).contains(record);
     }
     TableId table2 = TableId.of(databaseId, "NUMBERS2");
-    SpannerToAvro converter2 = new SpannerToAvroFactory().create(client, table2);
+    SpannerToAvro converter2 = SpannerToAvroFactory.INSTANCE.create(client, table2);
     for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
       assertThat(res)
           .contains(
@@ -420,7 +420,7 @@ public class ITSamplesTest {
     assertThat(receivedMessagesLatch.await(30L, TimeUnit.SECONDS)).isTrue();
 
     TableId table1 = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter1 = new SpannerToAvroFactory().create(client, table1);
+    SpannerToAvro converter1 = SpannerToAvroFactory.INSTANCE.create(client, table1);
     for (Struct row : numberRows(commitTs1, 0, 1)) {
       assertThat(res)
           .contains(
@@ -430,7 +430,7 @@ public class ITSamplesTest {
       assertThat(receivedRows2).doesNotContain(record);
     }
     TableId table2 = TableId.of(databaseId, "NUMBERS2");
-    SpannerToAvro converter2 = new SpannerToAvroFactory().create(client, table2);
+    SpannerToAvro converter2 = SpannerToAvroFactory.INSTANCE.create(client, table2);
     for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
       assertThat(res)
           .contains(
@@ -526,7 +526,7 @@ public class ITSamplesTest {
     String res = out.get(60L, TimeUnit.SECONDS);
 
     TableId table1 = TableId.of(databaseId, "NUMBERS1");
-    SpannerToAvro converter1 = new SpannerToAvroFactory().create(client, table1);
+    SpannerToAvro converter1 = SpannerToAvroFactory.INSTANCE.create(client, table1);
     for (Struct row : numberRows(commitTs1, 0, 1)) {
       assertThat(res).contains(String.format("Table: %s%n", table1));
       assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs1));
@@ -534,7 +534,7 @@ public class ITSamplesTest {
       assertThat(res).contains(String.format("Data: %s%n", converter1.decodeRecord(record)));
     }
     TableId table2 = TableId.of(databaseId, "NUMBERS2");
-    SpannerToAvro converter2 = new SpannerToAvroFactory().create(client, table2);
+    SpannerToAvro converter2 = SpannerToAvroFactory.INSTANCE.create(client, table2);
     for (Struct row : numberRows(commitTs2, 1, NUMBER_NAMES.length)) {
       assertThat(res).contains(String.format("Table: %s%n", table2));
       assertThat(res).contains(String.format("Commit timestamp: %s%n", commitTs2));

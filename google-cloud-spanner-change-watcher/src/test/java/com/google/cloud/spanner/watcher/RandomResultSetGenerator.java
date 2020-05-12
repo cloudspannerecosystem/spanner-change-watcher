@@ -146,7 +146,7 @@ public class RandomResultSetGenerator {
     return typeName;
   }
 
-  private static final ResultSetMetadata METADATA = generateMetadata();
+  public static final ResultSetMetadata METADATA = generateMetadata();
 
   private final int rowCount;
   private final Random random = new Random();

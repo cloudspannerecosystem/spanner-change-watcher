@@ -561,9 +561,9 @@ public class SpannerToAvroTest {
                 .to("FOO")
                 .build()))
         .thenReturn(createSchemaResultSet());
-    SpannerToAvroFactory factory = new SpannerToAvroFactory();
     SpannerToAvro converter =
-        factory.create(client, TableId.of(DatabaseId.of("p", "i", "i"), "FOO"));
+        SpannerToAvroFactory.INSTANCE.create(
+            client, TableId.of(DatabaseId.of("p", "i", "i"), "FOO"));
 
     Struct row =
         Struct.newBuilder()

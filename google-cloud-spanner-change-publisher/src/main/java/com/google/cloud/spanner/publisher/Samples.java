@@ -336,7 +336,6 @@ public class Samples {
 
     // Keep a cache of converters as these are expensive to create.
     Map<TableId, SpannerToAvro> converters = new HashMap<>();
-    SpannerToAvroFactory factory = new SpannerToAvroFactory();
     // Start a subscriber.
     Subscriber subscriber =
         Subscriber.newBuilder(
@@ -352,7 +351,7 @@ public class Samples {
                     // Get the changed row and decode the data.
                     SpannerToAvro converter = converters.get(table);
                     if (converter == null) {
-                      converter = factory.create(client, table);
+                      converter = SpannerToAvroFactory.INSTANCE.create(client, table);
                       converters.put(table, converter);
                     }
                     try {

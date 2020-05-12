@@ -44,9 +44,9 @@ public class SpannerToJsonTest {
   @Test
   public void testConvert() throws IOException {
     DatabaseClient client = mock(DatabaseClient.class);
-    SpannerToJsonFactory factory = new SpannerToJsonFactory();
     SpannerToJson converter =
-        factory.create(client, TableId.of(DatabaseId.of("p", "i", "i"), "FOO"));
+        SpannerToJsonFactory.INSTANCE.create(
+            client, TableId.of(DatabaseId.of("p", "i", "i"), "FOO"));
 
     Struct row =
         Struct.newBuilder()

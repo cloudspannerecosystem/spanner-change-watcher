@@ -91,7 +91,7 @@ public class SpannerTableChangeEventPublisher extends AbstractApiService impleme
     private Builder(SpannerTableChangeWatcher watcher, DatabaseClient client) {
       this.watcher = watcher;
       this.client = client;
-      this.converterFactory = new SpannerToAvroFactory();
+      this.converterFactory = SpannerToAvroFactory.INSTANCE;
     }
 
     /**

@@ -27,6 +27,10 @@ import com.google.protobuf.ByteString;
 
 /** Creates {@link SpannerToJson} converters. */
 public class SpannerToJsonFactory implements ConverterFactory {
+  public static final SpannerToJsonFactory INSTANCE = new SpannerToJsonFactory();
+
+  private SpannerToJsonFactory() {}
+
   @Override
   public SpannerToJson create(DatabaseClient client, TableId table) {
     return new SpannerToJson();

@@ -66,6 +66,10 @@ public class SpannerToAvroFactory implements ConverterFactory {
           + "AND TABLE_NAME = @table\n"
           + "ORDER BY ORDINAL_POSITION";
 
+  public static final SpannerToAvroFactory INSTANCE = new SpannerToAvroFactory();
+
+  private SpannerToAvroFactory() {}
+
   @Override
   public SpannerToAvro create(DatabaseClient client, TableId table) {
     return new SpannerToAvro(client, table);
