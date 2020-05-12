@@ -262,8 +262,10 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
               publishers = new HashMap<>(watcher.getTables().size());
               converters = new HashMap<>(watcher.getTables().size());
               Credentials useCredentials =
-                  credentials == null ? GoogleCredentials.getApplicationDefault() : credentials;
-              if (useCredentials == null) {
+                  credentials == null && !usePlainText
+                      ? GoogleCredentials.getApplicationDefault()
+                      : credentials;
+              if (useCredentials == null && !usePlainText) {
                 throw new IllegalArgumentException(
                     "There is no credentials set on the builder, and the environment has no default credentials set.");
               }

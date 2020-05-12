@@ -138,7 +138,12 @@ public class MainTest {
   @Test
   public void testCreateSpannerOptions() throws IOException {
     Configuration config =
-        createConfiguration(MainTest.createMinimalPropertiesPlus("spanner.project", "my-project"));
+        createConfiguration(
+            MainTest.createMinimalPropertiesPlus(
+                "spanner.project",
+                "my-project",
+                "spanner.credentials",
+                "src/test/resources/test-credentials.json"));
     SpannerOptions options = Main.createSpannerOptions(config);
     assertThat(options.getProjectId()).isEqualTo("my-project");
   }
@@ -163,6 +168,8 @@ public class MainTest {
                 "my-spanner-project",
                 "pubsub.project",
                 "my-pubsub-project",
+                "pubsub.credentials",
+                "src/test/resources/test-credentials.json",
                 "pubsub.topicNameFormat",
                 "my-pubsub-topic"));
     Spanner spanner = mock(Spanner.class);

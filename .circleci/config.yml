@@ -1,0 +1,43 @@
+# Orb 'circleci/maven@0.0.12' resolved to 'circleci/maven@0.0.12'
+version: 2
+jobs:
+  maven/test:
+    docker:
+    - image: circleci/openjdk:8-jdk-node
+    steps:
+    - checkout
+    - run:
+        name: Generate Cache Checksum
+        command: find . -name 'pom.xml' | sort | xargs cat > /tmp/maven_cache_seed
+    - restore_cache:
+        key: maven-{{ checksum "/tmp/maven_cache_seed" }}
+    - attach_workspace:
+        at: ~/java-spanner
+    - run:
+        name: Clone and install java-spanner repository
+        command: |
+          echo Cloning java-spanner
+          git clone git@github.com:googleapis/java-spanner.git ~/java-spanner
+          echo Switching to java-spanner workspace
+          cd ~/java-spanner
+          echo Checking out async-api
+          git checkout async-api
+          echo Installing async-api version of java-spanner
+          mvn -DskipTests clean install
+    - run:
+        name: Install Dependencies
+        command: mvn -DskipTests clean install dependency:resolve-plugins dependency:go-offline --settings 'pom.xml'
+    - run:
+        name: Run Tests
+        command: mvn verify --settings 'pom.xml'
+    - save_cache:
+        paths:
+        - ~/.m2
+        key: maven-{{ checksum "/tmp/maven_cache_seed" }}
+    - store_test_results:
+        path: target/surefire-reports
+workflows:
+  maven_test:
+    jobs:
+    - maven/test
+  version: 2
