@@ -16,12 +16,14 @@
 
 package com.google.cloud.spanner.watcher.it;
 
+import com.google.api.gax.rpc.PermissionDeniedException;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.ServiceOptions;
 import com.google.cloud.spanner.Database;
 import com.google.cloud.spanner.Instance;
 import com.google.cloud.spanner.InstanceConfig;
+import com.google.cloud.spanner.InstanceConfigId;
 import com.google.cloud.spanner.InstanceId;
 import com.google.cloud.spanner.InstanceInfo;
 import com.google.cloud.spanner.Spanner;
@@ -77,8 +79,23 @@ public final class SpannerTestHelper {
       env.instanceId = String.format(INSTANCE_ID_FORMAT, RND.nextInt(100000000));
     }
     if (env.isOwnedInstance) {
-      InstanceConfig instanceConfig =
-          env.spanner.getInstanceAdminClient().listInstanceConfigs().getValues().iterator().next();
+      InstanceConfig instanceConfig;
+      try {
+        instanceConfig =
+            env.spanner
+                .getInstanceAdminClient()
+                .listInstanceConfigs()
+                .getValues()
+                .iterator()
+                .next();
+      } catch (PermissionDeniedException e) {
+        // Ignore and just use a default config.
+        instanceConfig =
+            new InstanceConfig(
+                InstanceConfigId.of(SPANNER_PROJECT_ID, "us-east1"),
+                "Default config",
+                env.spanner.getInstanceAdminClient());
+      }
       env.instance =
           env.spanner
               .getInstanceAdminClient()
