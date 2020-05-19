@@ -233,7 +233,7 @@ public class ITSamplesTest {
                   env.topicId);
             },
             latch);
-    assertThat(latch.await(60L, TimeUnit.SECONDS)).isTrue();
+    assertThat(latch.await(120L, TimeUnit.SECONDS)).isTrue();
 
     final List<ByteString> receivedRows = Collections.synchronizedList(new ArrayList<>(3));
     final CountDownLatch receivedMessagesLatch = new CountDownLatch(3);
