@@ -16,7 +16,6 @@
 
 package com.google.cloud.spanner.watcher.it;
 
-import com.google.api.gax.rpc.PermissionDeniedException;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.ServiceOptions;
@@ -96,16 +95,24 @@ public final class SpannerTestHelper {
                 "Default config",
                 env.spanner.getInstanceAdminClient());
       }
-      env.instance =
-          env.spanner
-              .getInstanceAdminClient()
-              .createInstance(
-                  InstanceInfo.newBuilder(InstanceId.of(SPANNER_PROJECT_ID, env.instanceId))
-                      .setDisplayName("Test Instance")
-                      .setNodeCount(1)
-                      .setInstanceConfigId(instanceConfig.getId())
-                      .build())
-              .get();
+      try {
+        env.instance =
+            env.spanner
+                .getInstanceAdminClient()
+                .createInstance(
+                    InstanceInfo.newBuilder(InstanceId.of(SPANNER_PROJECT_ID, env.instanceId))
+                        .setDisplayName("Test Instance")
+                        .setNodeCount(1)
+                        .setInstanceConfigId(instanceConfig.getId())
+                        .build())
+                .get();
+      } catch (Exception e) {
+        // Not allowed to create instances. Pick first.
+        env.instance =
+            env.spanner.getInstanceAdminClient().listInstances().iterateAll().iterator().next();
+        env.instanceId = env.instance.getId().getInstance();
+        env.isOwnedInstance = false;
+      }
     }
   }
 
