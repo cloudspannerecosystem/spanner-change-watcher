@@ -88,7 +88,7 @@ public final class SpannerTestHelper {
                 .getValues()
                 .iterator()
                 .next();
-      } catch (PermissionDeniedException e) {
+      } catch (Exception e) {
         // Ignore and just use a default config.
         instanceConfig =
             new InstanceConfig(
