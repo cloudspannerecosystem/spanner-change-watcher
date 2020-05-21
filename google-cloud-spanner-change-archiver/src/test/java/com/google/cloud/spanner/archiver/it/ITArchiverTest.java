@@ -81,7 +81,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.threeten.bp.Duration;
 
-@Ignore("needs additional permissions")
 @RunWith(JUnit4.class)
 public class ITArchiverTest {
   private static final Logger logger = Logger.getLogger(ITArchiverTest.class.getName());

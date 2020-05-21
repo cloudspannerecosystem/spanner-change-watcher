@@ -19,6 +19,7 @@ package com.google.cloud.spanner.watcher.it;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.ServiceOptions;
+import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Database;
 import com.google.cloud.spanner.Instance;
 import com.google.cloud.spanner.InstanceConfig;
@@ -34,9 +35,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /** Helper class for integration tests using Spanner. */
 public final class SpannerTestHelper {
+  private static final Logger logger = Logger.getLogger(SpannerTestHelper.class.getName());
+
   public static class ITSpannerEnv {
     private Instance instance;
     private String instanceId = System.getProperty("spanner.instance");
@@ -58,7 +64,7 @@ public final class SpannerTestHelper {
     }
   }
 
-  private static final String INSTANCE_ID_FORMAT = "scw-test-instance-%08d";
+  private static final String INSTANCE_ID_FORMAT = "scw-test-instance-%08d-%s";
   private static final String DATABASE_ID_FORMAT = "scw-test-db-%08d";
   private static final Random RND = new Random();
 
@@ -75,7 +81,11 @@ public final class SpannerTestHelper {
             .getService();
     if (env.instanceId == null) {
       env.isOwnedInstance = true;
-      env.instanceId = String.format(INSTANCE_ID_FORMAT, RND.nextInt(100000000));
+      env.instanceId =
+          String.format(
+              INSTANCE_ID_FORMAT,
+              RND.nextInt(100000000),
+              Timestamp.ofTimeSecondsAndNanos(System.currentTimeMillis() * 1000L, 0).toString());
     }
     if (env.isOwnedInstance) {
       InstanceConfig instanceConfig;
@@ -118,6 +128,7 @@ public final class SpannerTestHelper {
 
   public static void teardownSpanner(ITSpannerEnv env) {
     if (env.isOwnedInstance) {
+      deleteOldTestInstances(env);
       env.instance.delete();
     } else {
       for (Database db : env.databases) {
@@ -125,6 +136,31 @@ public final class SpannerTestHelper {
       }
     }
     env.spanner.close();
+  }
+
+  private static void deleteOldTestInstances(ITSpannerEnv env) {
+    for (Instance instance : env.spanner.getInstanceAdminClient().listInstances().iterateAll()) {
+      logger.log(Level.INFO, "Found instance " + instance.getId().getName());
+      if (instance
+          .getId()
+          .getInstance()
+          .matches("scw-test-instance-\\d{8}-\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z")) {
+        logger.log(Level.INFO, "Found test instance " + instance.getId().getName());
+        Timestamp created = Timestamp.parseTimestamp(instance.getId().getInstance().substring(27));
+        logger.log(Level.INFO, "Created at " + created.toString());
+        if (TimeUnit.HOURS.convert(
+                TimeUnit.SECONDS.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
+                    - created.getSeconds(),
+                TimeUnit.MILLISECONDS)
+            > 24L) {
+          // Test instance is more than 24 hours old. Delete it.
+          logger.log(
+              Level.WARNING,
+              String.format("Deleting test instance %s as it is more than 24 hours old."));
+          // instance.delete();
+        }
+      }
+    }
   }
 
   public static String getSpannerProjectId() {

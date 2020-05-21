@@ -42,7 +42,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-@Ignore("needs additional permissions")
 @RunWith(JUnit4.class)
 public class ITUploaderTest {
   private static CloudFunctions functions;
