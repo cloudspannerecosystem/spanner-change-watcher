@@ -85,7 +85,10 @@ public final class SpannerTestHelper {
           String.format(
               INSTANCE_ID_FORMAT,
               RND.nextInt(100000000),
-              Timestamp.ofTimeSecondsAndNanos(System.currentTimeMillis() * 1000L, 0).toString());
+              Timestamp.ofTimeSecondsAndNanos(
+                      TimeUnit.SECONDS.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS),
+                      0)
+                  .toString());
     }
     if (env.isOwnedInstance) {
       logger.log(Level.INFO, "Using owned test instance");
