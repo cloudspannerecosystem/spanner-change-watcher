@@ -88,6 +88,8 @@ public final class SpannerTestHelper {
               Timestamp.ofTimeSecondsAndNanos(System.currentTimeMillis() * 1000L, 0).toString());
     }
     if (env.isOwnedInstance) {
+      logger.log(Level.INFO, "Using owned test instance");
+      logger.log(Level.INFO, "Getting nearest instance config");
       InstanceConfig instanceConfig;
       try {
         instanceConfig =
@@ -99,6 +101,7 @@ public final class SpannerTestHelper {
                 .next();
       } catch (Exception e) {
         // Ignore and just use a default config.
+        logger.log(Level.INFO, "Getting nearest instance config failed. Using default config.");
         instanceConfig =
             new InstanceConfig(
                 InstanceConfigId.of(SPANNER_PROJECT_ID, "us-east1"),
@@ -106,6 +109,7 @@ public final class SpannerTestHelper {
                 env.spanner.getInstanceAdminClient());
       }
       try {
+        logger.log(Level.INFO, "Creating test instance " + env.instanceId);
         env.instance =
             env.spanner
                 .getInstanceAdminClient()
@@ -117,6 +121,7 @@ public final class SpannerTestHelper {
                         .build())
                 .get();
       } catch (Exception e) {
+        logger.log(Level.INFO, "Creating test instance failed. Using first available instance.");
         // Not allowed to create instances. Pick first.
         env.instance =
             env.spanner.getInstanceAdminClient().listInstances().iterateAll().iterator().next();
@@ -128,7 +133,9 @@ public final class SpannerTestHelper {
 
   public static void teardownSpanner(ITSpannerEnv env) {
     if (env.isOwnedInstance) {
+      logger.log(Level.INFO, "Checking for old test instances that should be deleted.");
       deleteOldTestInstances(env);
+      logger.log(Level.INFO, "Deleting test instance " + env.instance.getId().getName());
       env.instance.delete();
     } else {
       for (Database db : env.databases) {
