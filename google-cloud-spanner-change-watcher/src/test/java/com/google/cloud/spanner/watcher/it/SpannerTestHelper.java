@@ -88,7 +88,8 @@ public final class SpannerTestHelper {
               Timestamp.ofTimeSecondsAndNanos(
                       TimeUnit.SECONDS.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS),
                       0)
-                  .toString());
+                  .toString()
+                  .replace(":", "-"));
     }
     if (env.isOwnedInstance) {
       logger.log(Level.INFO, "Using owned test instance");
@@ -155,9 +156,11 @@ public final class SpannerTestHelper {
       if (instance
           .getId()
           .getInstance()
-          .matches("scw-test-instance-\\d{8}-\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z")) {
+          .matches("scw-test-instance-\\d{8}-\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}Z")) {
         logger.log(Level.INFO, "Found test instance " + instance.getId().getName());
-        Timestamp created = Timestamp.parseTimestamp(instance.getId().getInstance().substring(27));
+        String ts = instance.getId().getInstance().substring(27);
+        ts = ts.substring(0, 10) + ts.substring(10).replaceAll("-", ":");
+        Timestamp created = Timestamp.parseTimestamp(ts);
         logger.log(Level.INFO, "Created at " + created.toString());
         if (TimeUnit.HOURS.convert(
                 TimeUnit.SECONDS.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
