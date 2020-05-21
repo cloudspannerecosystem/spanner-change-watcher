@@ -89,7 +89,8 @@ public final class SpannerTestHelper {
                       TimeUnit.SECONDS.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS),
                       0)
                   .toString()
-                  .replace(":", "-"));
+                  .replace(":", "-")
+                  .toLowerCase());
     }
     if (env.isOwnedInstance) {
       logger.log(Level.INFO, "Using owned test instance");
@@ -160,13 +161,16 @@ public final class SpannerTestHelper {
         logger.log(Level.INFO, "Found test instance " + instance.getId().getName());
         String ts = instance.getId().getInstance().substring(27);
         ts = ts.substring(0, 10) + ts.substring(10).replaceAll("-", ":");
-        Timestamp created = Timestamp.parseTimestamp(ts);
+        Timestamp created = Timestamp.parseTimestamp(ts.toUpperCase());
         logger.log(Level.INFO, "Created at " + created.toString());
-        if (TimeUnit.HOURS.convert(
-                TimeUnit.SECONDS.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
-                    - created.getSeconds(),
-                TimeUnit.MILLISECONDS)
-            > 24L) {
+        long ageInSeconds =
+            TimeUnit.SECONDS.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
+                - created.getSeconds();
+        logger.log(Level.INFO, "Instance age in seconds: " + ageInSeconds);
+        logger.log(
+            Level.INFO,
+            "Instance age in hours:" + TimeUnit.HOURS.convert(ageInSeconds, TimeUnit.SECONDS));
+        if (TimeUnit.HOURS.convert(ageInSeconds, TimeUnit.SECONDS) > 24L) {
           // Test instance is more than 24 hours old. Delete it.
           logger.log(
               Level.WARNING,
