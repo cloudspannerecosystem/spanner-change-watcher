@@ -37,10 +37,12 @@ import java.util.Scanner;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+@Ignore("api not yet enabled")
 @RunWith(JUnit4.class)
 public class ITUploaderTest {
   private static CloudFunctions functions;

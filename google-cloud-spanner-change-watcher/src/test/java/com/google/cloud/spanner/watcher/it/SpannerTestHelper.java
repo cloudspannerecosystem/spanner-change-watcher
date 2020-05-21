@@ -124,7 +124,8 @@ public final class SpannerTestHelper {
                         .build())
                 .get();
       } catch (Exception e) {
-        logger.log(Level.INFO, "Creating test instance failed. Using first available instance.");
+        logger.log(
+            Level.WARNING, "Creating test instance failed. Using first available instance.", e);
         // Not allowed to create instances. Pick first.
         env.instance =
             env.spanner.getInstanceAdminClient().listInstances().iterateAll().iterator().next();
