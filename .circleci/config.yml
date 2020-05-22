@@ -28,8 +28,16 @@ jobs:
         name: Install Dependencies
         command: mvn -DskipTests clean install dependency:resolve-plugins dependency:go-offline --settings 'pom.xml'
     - run:
-        name: Run Tests
+        name: Run Unit Tests
         command: mvn verify --settings 'pom.xml'
+    - run:
+        name: set credentials
+        command: |
+          echo $GCLOUD_SERVICE_KEY > $HOME/gcloud-service-key.json
+          echo 'export GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud-service-key.json' >> $BASH_ENV
+    - run:
+        name: Run Integration Tests
+        command: mvn -B -Penable-integration-tests -DtrimStackTrace=false -fae verify --settings 'pom.xml'
     - save_cache:
         paths:
         - ~/.m2

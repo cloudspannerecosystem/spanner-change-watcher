@@ -145,6 +145,10 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <forkedProcessTimeoutInSeconds>3000</forkedProcessTimeoutInSeconds>
+          <argLine>-Xmx1024m</argLine>
+        </configuration>
       </plugin>
     </plugins>
   </build>
