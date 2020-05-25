@@ -75,13 +75,11 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.threeten.bp.Duration;
 
-@Ignore("api not yet enabled")
 @RunWith(JUnit4.class)
 public class ITArchiverTest {
   private static final Logger logger = Logger.getLogger(ITArchiverTest.class.getName());
