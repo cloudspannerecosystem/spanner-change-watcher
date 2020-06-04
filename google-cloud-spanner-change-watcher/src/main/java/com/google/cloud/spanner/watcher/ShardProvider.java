@@ -18,7 +18,11 @@ package com.google.cloud.spanner.watcher;
 
 import com.google.cloud.spanner.Statement;
 
-/** Interface for implementations of automatic sharding. */
+/**
+ * Interface for providing a shard id for Spanner Table Change watchers. The shard id will be used
+ * by the change watcher when querying the table for the most recent changes. This can be used to
+ * prevent full table scans when polling a table.
+ */
 public interface ShardProvider {
   /**
    * Appends the required sharding filter to the given statement. This could be an SQL fragment or

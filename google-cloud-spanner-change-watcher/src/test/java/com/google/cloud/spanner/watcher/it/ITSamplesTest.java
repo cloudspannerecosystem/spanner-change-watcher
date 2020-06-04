@@ -70,6 +70,8 @@ public class ITSamplesTest {
             ImmutableList.of(
                 "CREATE TABLE NUMBERS1 (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE TABLE NUMBERS2 (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
+                "CREATE TABLE MY_TABLE (ID INT64, NAME STRING(MAX), SHARD_ID STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
+                "CREATE INDEX IDX_MY_TABLE_SHARDING ON MY_TABLE (SHARD_ID, LAST_MODIFIED)",
                 "CREATE TABLE NUMBERS_WITHOUT_COMMIT_TIMESTAMP (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP) PRIMARY KEY (ID)"));
     databaseId = database.getId();
     client = env.getSpanner().getDatabaseClient(databaseId);
@@ -93,6 +95,7 @@ public class ITSamplesTest {
         ImmutableList.of(
             Mutation.delete("NUMBERS1", KeySet.all()),
             Mutation.delete("NUMBERS2", KeySet.all()),
+            Mutation.delete("MY_TABLE", KeySet.all()),
             Mutation.delete("NUMBERS_WITHOUT_COMMIT_TIMESTAMP", KeySet.all())));
   }
 
@@ -470,5 +473,25 @@ public class ITSamplesTest {
       assertThat(res)
           .contains(String.format("Received change for table %s: %s%n", table2, row.toString()));
     }
+  }
+
+  @Test
+  public void testWatchTableWithTimebasedShardingExample() throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    Future<String> out =
+        runSample(
+            () -> {
+              Samples.watchTableWithTimebasedShardingExample(
+                  databaseId.getInstanceId().getProject(),
+                  databaseId.getInstanceId().getInstance(),
+                  databaseId.getDatabase(),
+                  "MY_TABLE");
+            },
+            latch);
+    latch.await(120L, TimeUnit.SECONDS);
+    String res = out.get(120L, TimeUnit.SECONDS);
+    assertThat(res).contains("1, Name 1,");
+    assertThat(res).contains("2, Name 2,");
+    assertThat(res).contains("3, Name 3,");
   }
 }

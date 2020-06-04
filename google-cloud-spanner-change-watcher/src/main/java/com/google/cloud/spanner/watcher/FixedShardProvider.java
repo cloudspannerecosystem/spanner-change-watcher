@@ -22,6 +22,29 @@ import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Statement.Builder;
 import com.google.cloud.spanner.Type;
 
+/**
+ * Implementation of {@link ShardProvider} that returns a fixed shard id. This can be used in
+ * combination with multiple change watchers, where each change watcher is responsible for watching
+ * a specific segment of the table. Each watcher should also have its own {@link
+ * CommitTimestampRepository}.
+ *
+ * <p>Example usage in combination with a {@link SpannerTableTailer}:
+ *
+ * <pre>{@code
+ * String shards = new String[] {"EAST", "WEST"};
+ * for (String shard : shards) {
+ *   SpannerTableTailer tailer =
+ *       SpannerTableTailer.newBuilder(
+ *               spanner, TableId.of(databaseId, "TABLE_NAME"))
+ *           .setShardProvider(FixedShardProvider.create("SHARD_COLUMN", shard))
+ *           .setCommitTimestampRepository(
+ *               SpannerCommitTimestampRepository.newBuilder(spanner, databaseId)
+ *                   .setCommitTimestampsTable("LAST_SEEN_COMMIT_TIMESTAMPS_" + shard)
+ *                   .build())
+ *           .build();
+ * }
+ * }</pre>
+ */
 public final class FixedShardProvider implements ShardProvider {
   private final Type.Code type;
   private final Object value;
