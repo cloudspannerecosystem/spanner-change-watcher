@@ -24,6 +24,7 @@ import com.google.cloud.spanner.MockSpannerServiceImpl.StatementResult;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.Statement;
+import com.google.cloud.spanner.watcher.TimeBasedShardProvider.Interval;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ListValue;
 import com.google.protobuf.Value;
@@ -353,11 +354,33 @@ public abstract class AbstractMockServerTest {
           .build();
   public static final Statement SELECT_FOO_STATEMENT =
       Statement.newBuilder(
-              String.format(SpannerTableTailer.POLL_QUERY, "`Foo`", "LastModified", "LastModified"))
+              String.format(
+                  SpannerTableTailer.POLL_QUERY + SpannerTableTailer.POLL_QUERY_ORDER_BY,
+                  "`Foo`",
+                  "LastModified",
+                  "LastModified"))
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
   public static final int SELECT_FOO_ROW_COUNT = 10;
+  public static final Statement SELECT_FOO_WITH_SHARDING_PER_DAY_STATEMENT =
+      Statement.newBuilder(
+              String.format(SpannerTableTailer.POLL_QUERY, "`Foo`", "LastModified")
+                  + " AND `ShardId` IN ("
+                  + String.format(
+                      TimeBasedShardProvider.CURRENT_SHARD_FUNCTION_FORMAT,
+                      Interval.DAY.getDateFormat())
+                  + ", "
+                  + String.format(
+                      TimeBasedShardProvider.PREVIOUS_SHARD_FUNCTION_FORMAT,
+                      Interval.DAY.getDateFormat(),
+                      60)
+                  + ")"
+                  + String.format(SpannerTableTailer.POLL_QUERY_ORDER_BY, "LastModified"))
+          .bind("prevCommitTimestamp")
+          .to(Timestamp.MIN_VALUE)
+          .build();
+  public static final int SELECT_FOO_WITH_SHARDING_PER_DAY_ROW_COUNT = 5;
   private static final com.google.spanner.v1.ResultSet COLUMNS_OPTIONS_FOO_RESULT =
       com.google.spanner.v1.ResultSet.newBuilder()
           .addRows(
@@ -381,7 +404,11 @@ public abstract class AbstractMockServerTest {
           .build();
   public static final Statement SELECT_BAR_STATEMENT =
       Statement.newBuilder(
-              String.format(SpannerTableTailer.POLL_QUERY, "`Bar`", "LastModified", "LastModified"))
+              String.format(
+                  SpannerTableTailer.POLL_QUERY + SpannerTableTailer.POLL_QUERY_ORDER_BY,
+                  "`Bar`",
+                  "LastModified",
+                  "LastModified"))
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
@@ -415,6 +442,7 @@ public abstract class AbstractMockServerTest {
   private static InetSocketAddress address;
   private Spanner spanner;
   private Statement currentFooPollStatement;
+  private Statement currentFooWithShardingPollStatement;
   private Statement currentBarPollStatement;
 
   @BeforeClass
@@ -484,6 +512,21 @@ public abstract class AbstractMockServerTest {
     mockSpanner.putStatementResults(
         StatementResult.query(SELECT_FOO_STATEMENT, fooResults),
         StatementResult.query(currentFooPollStatement, new RandomResultSetGenerator(0).generate()));
+    // Poll Foo with sharding results.
+    ResultSet fooWithShardingResults =
+        new RandomResultSetGenerator(SELECT_FOO_WITH_SHARDING_PER_DAY_ROW_COUNT).generate();
+    Timestamp maxFooWithShardingCommitTimestamp =
+        RandomResultSetGenerator.getMaxCommitTimestamp(fooWithShardingResults);
+    currentFooWithShardingPollStatement =
+        SELECT_FOO_WITH_SHARDING_PER_DAY_STATEMENT
+            .toBuilder()
+            .bind("prevCommitTimestamp")
+            .to(maxFooWithShardingCommitTimestamp)
+            .build();
+    mockSpanner.putStatementResults(
+        StatementResult.query(SELECT_FOO_WITH_SHARDING_PER_DAY_STATEMENT, fooWithShardingResults),
+        StatementResult.query(
+            currentFooWithShardingPollStatement, new RandomResultSetGenerator(0).generate()));
     // Poll Bar results.
     mockSpanner.putStatementResult(
         StatementResult.query(COLUMN_OPTIONS_BAR_STATEMENT, COLUMNS_OPTIONS_BAR_RESULT));

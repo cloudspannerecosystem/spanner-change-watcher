@@ -69,13 +69,14 @@ import org.threeten.bp.Duration;
  */
 public class SpannerTableTailer extends AbstractApiService implements SpannerTableChangeWatcher {
   static final Logger logger = Logger.getLogger(SpannerTableTailer.class.getName());
-  static final String POLL_QUERY =
-      "SELECT *\n" + "FROM %s\n" + "WHERE `%s`>@prevCommitTimestamp ORDER BY `%s`";
+  static final String POLL_QUERY = "SELECT *\nFROM %s\nWHERE `%s`>@prevCommitTimestamp";
+  static final String POLL_QUERY_ORDER_BY = "\nORDER BY `%s`";
 
   /** Builder for a {@link SpannerTableTailer}. */
   public static class Builder {
     private final Spanner spanner;
     private final TableId table;
+    private ShardProvider shardProvider;
     private CommitTimestampRepository commitTimestampRepository;
     private Duration pollInterval = Duration.ofSeconds(1L);
     private ScheduledExecutorService executor;
@@ -85,6 +86,15 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
       this.table = Preconditions.checkNotNull(table);
       this.commitTimestampRepository =
           SpannerCommitTimestampRepository.newBuilder(spanner, table.getDatabaseId()).build();
+    }
+
+    /**
+     * Sets a dynamic {@link ShardProvider} that this {@link SpannerTableTailer} should use for
+     * automaticy sharding.
+     */
+    public Builder setShardProvider(ShardProvider provider) {
+      this.shardProvider = Preconditions.checkNotNull(provider);
+      return this;
     }
 
     /**
@@ -125,13 +135,12 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
     return new Builder(spanner, table);
   }
 
-  // TODO: Check and warn if the commit timestamp column is not part of an index.
-
   private final Object lock = new Object();
   private ScheduledFuture<?> scheduled;
   private ApiFuture<Void> currentPollFuture;
   private final DatabaseClient client;
   private final TableId table;
+  private final ShardProvider shardProvider;
   private final List<RowChangeCallback> callbacks = new LinkedList<>();
   private final CommitTimestampRepository commitTimestampRepository;
   private final Duration pollInterval;
@@ -141,11 +150,11 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   private Timestamp lastSeenCommitTimestamp;
 
   private String commitTimestampColumn;
-  private Statement.Builder pollStatementBuilder;
 
   private SpannerTableTailer(Builder builder) {
     this.client = builder.spanner.getDatabaseClient(builder.table.getDatabaseId());
     this.table = builder.table;
+    this.shardProvider = builder.shardProvider;
     this.commitTimestampRepository = builder.commitTimestampRepository;
     this.pollInterval = builder.pollInterval;
     this.executor =
@@ -183,13 +192,6 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
             try {
               lastSeenCommitTimestamp = commitTimestampRepository.get(table);
               commitTimestampColumn = Futures.getUnchecked(commitTimestampColFut);
-              pollStatementBuilder =
-                  Statement.newBuilder(
-                      String.format(
-                          POLL_QUERY,
-                          table.getSqlIdentifier(),
-                          commitTimestampColumn,
-                          commitTimestampColumn));
               logger.log(Level.INFO, "Watcher started for table {0}", table);
               notifyStarted();
               scheduled = executor.schedule(new SpannerTailerRunner(), 0L, TimeUnit.MILLISECONDS);
@@ -315,11 +317,18 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
           String.format(
               "Starting poll for commit timestamp %s", lastSeenCommitTimestamp.toString()));
       startedPollWithCommitTimestamp = lastSeenCommitTimestamp;
+      Statement.Builder statementBuilder =
+          Statement.newBuilder(
+              String.format(POLL_QUERY, table.getSqlIdentifier(), commitTimestampColumn));
+      if (shardProvider != null) {
+        shardProvider.appendShardFilter(statementBuilder);
+      }
+      statementBuilder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
       try (AsyncResultSet rs =
           client
               .singleUse()
               .executeQueryAsync(
-                  pollStatementBuilder
+                  statementBuilder
                       .bind("prevCommitTimestamp")
                       .to(lastSeenCommitTimestamp)
                       .build())) {
