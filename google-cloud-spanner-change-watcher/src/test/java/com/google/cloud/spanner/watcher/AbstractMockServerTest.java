@@ -170,6 +170,76 @@ public abstract class AbstractMockServerTest {
                           Value.newBuilder()
                               .setStringValue(
                                   SpannerCommitTimestampRepository
+                                      .DEFAULT_SHARD_ID_BOOL_COLUMN_NAME)
+                              .build())
+                      .addValues(Value.newBuilder().setStringValue("BOOL").build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          Value.newBuilder()
+                              .setStringValue(
+                                  SpannerCommitTimestampRepository
+                                      .DEFAULT_SHARD_ID_BYTES_COLUMN_NAME)
+                              .build())
+                      .addValues(Value.newBuilder().setStringValue("BYTES(MAX)").build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          Value.newBuilder()
+                              .setStringValue(
+                                  SpannerCommitTimestampRepository
+                                      .DEFAULT_SHARD_ID_DATE_COLUMN_NAME)
+                              .build())
+                      .addValues(Value.newBuilder().setStringValue("DATE").build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          Value.newBuilder()
+                              .setStringValue(
+                                  SpannerCommitTimestampRepository
+                                      .DEFAULT_SHARD_ID_FLOAT64_COLUMN_NAME)
+                              .build())
+                      .addValues(Value.newBuilder().setStringValue("FLOAT64").build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          Value.newBuilder()
+                              .setStringValue(
+                                  SpannerCommitTimestampRepository
+                                      .DEFAULT_SHARD_ID_INT64_COLUMN_NAME)
+                              .build())
+                      .addValues(Value.newBuilder().setStringValue("INT64").build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          Value.newBuilder()
+                              .setStringValue(
+                                  SpannerCommitTimestampRepository
+                                      .DEFAULT_SHARD_ID_STRING_COLUMN_NAME)
+                              .build())
+                      .addValues(Value.newBuilder().setStringValue("STRING(MAX)").build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          Value.newBuilder()
+                              .setStringValue(
+                                  SpannerCommitTimestampRepository
+                                      .DEFAULT_SHARD_ID_TIMESTAMP_COLUMN_NAME)
+                              .build())
+                      .addValues(Value.newBuilder().setStringValue("TIMESTAMP").build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          Value.newBuilder()
+                              .setStringValue(
+                                  SpannerCommitTimestampRepository
                                       .DEFAULT_COMMIT_TIMESTAMP_COLUMN_NAME)
                               .build())
                       .addValues(Value.newBuilder().setStringValue("TIMESTAMP").build())
@@ -219,6 +289,63 @@ public abstract class AbstractMockServerTest {
                       Value.newBuilder()
                           .setStringValue(
                               SpannerCommitTimestampRepository.DEFAULT_TABLE_NAME_COLUMN_NAME)
+                          .build())
+                  .build())
+          .addRows(
+              ListValue.newBuilder()
+                  .addValues(
+                      Value.newBuilder()
+                          .setStringValue(
+                              SpannerCommitTimestampRepository.DEFAULT_SHARD_ID_BOOL_COLUMN_NAME)
+                          .build())
+                  .build())
+          .addRows(
+              ListValue.newBuilder()
+                  .addValues(
+                      Value.newBuilder()
+                          .setStringValue(
+                              SpannerCommitTimestampRepository.DEFAULT_SHARD_ID_BYTES_COLUMN_NAME)
+                          .build())
+                  .build())
+          .addRows(
+              ListValue.newBuilder()
+                  .addValues(
+                      Value.newBuilder()
+                          .setStringValue(
+                              SpannerCommitTimestampRepository.DEFAULT_SHARD_ID_DATE_COLUMN_NAME)
+                          .build())
+                  .build())
+          .addRows(
+              ListValue.newBuilder()
+                  .addValues(
+                      Value.newBuilder()
+                          .setStringValue(
+                              SpannerCommitTimestampRepository.DEFAULT_SHARD_ID_FLOAT64_COLUMN_NAME)
+                          .build())
+                  .build())
+          .addRows(
+              ListValue.newBuilder()
+                  .addValues(
+                      Value.newBuilder()
+                          .setStringValue(
+                              SpannerCommitTimestampRepository.DEFAULT_SHARD_ID_INT64_COLUMN_NAME)
+                          .build())
+                  .build())
+          .addRows(
+              ListValue.newBuilder()
+                  .addValues(
+                      Value.newBuilder()
+                          .setStringValue(
+                              SpannerCommitTimestampRepository.DEFAULT_SHARD_ID_STRING_COLUMN_NAME)
+                          .build())
+                  .build())
+          .addRows(
+              ListValue.newBuilder()
+                  .addValues(
+                      Value.newBuilder()
+                          .setStringValue(
+                              SpannerCommitTimestampRepository
+                                  .DEFAULT_SHARD_ID_TIMESTAMP_COLUMN_NAME)
                           .build())
                   .build())
           .setMetadata(FIND_LAST_SEEN_COMMIT_TIMESTAMPS_PK_METADATA)

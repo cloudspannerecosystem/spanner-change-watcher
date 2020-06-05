@@ -19,6 +19,7 @@ package com.google.cloud.spanner.watcher;
 import com.google.cloud.spanner.ReadContext;
 import com.google.cloud.spanner.ResultSet;
 import com.google.cloud.spanner.Statement;
+import com.google.cloud.spanner.Value;
 
 /**
  * Implementation of {@link ShardProvider} that generates a {@link ShardId} based on the current
@@ -27,7 +28,7 @@ import com.google.cloud.spanner.Statement;
  * that are being watched update the shard column with the most recent shard id for each update that
  * is written to the tables.
  *
- * @see Samples#watchTableWithTimebasedShardingExample(String, String, String, String) for an
+ * @see Samples#watchTableWithTimebasedShardProviderExample(String, String, String, String) for an
  *     example on how to use this {@link ShardProvider}.
  */
 public final class TimeBasedShardProvider implements ShardProvider {
@@ -81,7 +82,7 @@ public final class TimeBasedShardProvider implements ShardProvider {
     /**
      * Returns the SQL expression that calculates the current shard id. This expression can be
      * included in DML statements to automatically set the current shard id. See {@link
-     * Samples#watchTableWithTimebasedShardingExample(String, String, String, String)} for an
+     * Samples#watchTableWithTimebasedShardProviderExample(String, String, String, String)} for an
      * example on how to use this.
      */
     public String getShardIdExpression() {
@@ -130,5 +131,12 @@ public final class TimeBasedShardProvider implements ShardProvider {
   @Override
   public void appendShardFilter(Statement.Builder statement) {
     statement.append(sqlAppendment);
+  }
+
+  @Override
+  public Value getShardValue() {
+    // A TimeBasedShardProvider does not have a fixed value that should be used to separate
+    // different commit timestamps in the commit timestamp repository.
+    return null;
   }
 }

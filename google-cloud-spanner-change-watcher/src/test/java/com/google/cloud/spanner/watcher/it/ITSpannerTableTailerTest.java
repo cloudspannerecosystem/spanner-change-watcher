@@ -489,9 +489,6 @@ public class ITSpannerTableTailerTest {
               .setPollInterval(Duration.ofMillis(10L))
               .setCommitTimestampRepository(
                   SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
-                      // We need to use a separate LAST_SEEN_COMMIT_TIMESTAMPS table for each
-                      // tailer.
-                      .setCommitTimestampsTable("LAST_SEEN_COMMIT_TIMESTAMPS_" + shard)
                       .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
                       .build())
               .build();

@@ -190,7 +190,12 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
           public void run() {
             logger.log(Level.INFO, "Initializing watcher for table {0}", table);
             try {
-              lastSeenCommitTimestamp = commitTimestampRepository.get(table);
+              if (shardProvider == null) {
+                lastSeenCommitTimestamp = commitTimestampRepository.get(table);
+              } else {
+                lastSeenCommitTimestamp =
+                    commitTimestampRepository.get(table, shardProvider.getShardValue());
+              }
               commitTimestampColumn = Futures.getUnchecked(commitTimestampColFut);
               logger.log(Level.INFO, "Watcher started for table {0}", table);
               notifyStarted();
@@ -235,7 +240,12 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
       // Store the last seen commit timestamp in the repository to ensure that the poller will pick
       // up at the right timestamp again if it is stopped or fails.
       if (lastSeenCommitTimestamp.compareTo(startedPollWithCommitTimestamp) > 0) {
-        commitTimestampRepository.set(table, lastSeenCommitTimestamp);
+        if (shardProvider == null) {
+          commitTimestampRepository.set(table, lastSeenCommitTimestamp);
+        } else {
+          commitTimestampRepository.set(
+              table, shardProvider.getShardValue(), lastSeenCommitTimestamp);
+        }
       }
       synchronized (lock) {
         if (state() == State.RUNNING) {

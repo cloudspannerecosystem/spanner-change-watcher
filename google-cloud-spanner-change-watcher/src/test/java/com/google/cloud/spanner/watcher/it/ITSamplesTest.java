@@ -129,7 +129,7 @@ public class ITSamplesTest {
                   @Override
                   public void write(byte buf[], int off, int len) {
                     super.write(buf, off, len);
-                    if (new String(buf).equals("Started change watcher")) {
+                    if (bout.toString().contains("Started change watcher")) {
                       startedLatch.countDown();
                     }
                   }
@@ -476,12 +476,64 @@ public class ITSamplesTest {
   }
 
   @Test
-  public void testWatchTableWithTimebasedShardingExample() throws Exception {
+  public void testWatchTableWithFixedShardProviderExample() throws Exception {
     CountDownLatch latch = new CountDownLatch(1);
     Future<String> out =
         runSample(
             () -> {
-              Samples.watchTableWithTimebasedShardingExample(
+              Samples.watchTableWithShardingExample(
+                  databaseId.getInstanceId().getProject(),
+                  databaseId.getInstanceId().getInstance(),
+                  databaseId.getDatabase(),
+                  "MY_TABLE");
+            },
+            latch);
+    latch.await(120L, TimeUnit.SECONDS);
+    client.write(
+        ImmutableList.of(
+            Mutation.newInsertBuilder("MY_TABLE")
+                .set("ID")
+                .to(1L)
+                .set("NAME")
+                .to("Name 1")
+                .set("SHARD_ID")
+                .to("WEST")
+                .set("LAST_MODIFIED")
+                .to(Value.COMMIT_TIMESTAMP)
+                .build(),
+            Mutation.newInsertBuilder("MY_TABLE")
+                .set("ID")
+                .to(2L)
+                .set("NAME")
+                .to("Name 2")
+                .set("SHARD_ID")
+                .to("EAST")
+                .set("LAST_MODIFIED")
+                .to(Value.COMMIT_TIMESTAMP)
+                .build(),
+            Mutation.newInsertBuilder("MY_TABLE")
+                .set("ID")
+                .to(3L)
+                .set("NAME")
+                .to("Name 3")
+                .set("SHARD_ID")
+                .to("WEST")
+                .set("LAST_MODIFIED")
+                .to(Value.COMMIT_TIMESTAMP)
+                .build()));
+    String res = out.get(30L, TimeUnit.SECONDS);
+    assertThat(res).contains("1, Name 1, WEST");
+    assertThat(res).contains("2, Name 2, EAST");
+    assertThat(res).contains("3, Name 3, WEST");
+  }
+
+  @Test
+  public void testWatchTableWithTimebasedShardProviderExample() throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    Future<String> out =
+        runSample(
+            () -> {
+              Samples.watchTableWithTimebasedShardProviderExample(
                   databaseId.getInstanceId().getProject(),
                   databaseId.getInstanceId().getInstance(),
                   databaseId.getDatabase(),

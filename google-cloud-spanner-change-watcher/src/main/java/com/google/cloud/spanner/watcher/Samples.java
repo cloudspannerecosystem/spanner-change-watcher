@@ -34,6 +34,8 @@ import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallb
 import com.google.cloud.spanner.watcher.TimeBasedShardProvider.Interval;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
@@ -382,8 +384,8 @@ public class Samples {
   }
 
   /**
-   * Watch a table using a time based sharding algorithm. The sample assumes that the given table
-   * has the following structure:
+   * Watch a table that contains a sharding column with one watcher for each shard value. The sample
+   * assumes that the given table has the following structure:
    *
    * <pre>{@code
    * CREATE TABLE MY_TABLE (
@@ -396,7 +398,72 @@ public class Samples {
    * CREATE INDEX IDX_MY_TABLE_SHARD_ID ON MY_TABLE (SHARD_ID, LAST_MODIFIED_AT);
    * }</pre>
    */
-  public static void watchTableWithTimebasedShardingExample(
+  public static void watchTableWithShardingExample(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String table // "MY_TABLE"
+      ) throws InterruptedException {
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    DatabaseId databaseId = DatabaseId.of(project, instance, database);
+    TableId tableId = TableId.of(databaseId, table);
+    final CountDownLatch latch = new CountDownLatch(3);
+
+    // The table has two possible shard values.
+    ImmutableList<String> shards = ImmutableList.of("EAST", "WEST");
+    // We create one watcher for each shard.
+    List<SpannerTableChangeWatcher> watchers = new LinkedList<>();
+    for (String shard : shards) {
+      SpannerTableChangeWatcher watcher =
+          SpannerTableTailer.newBuilder(spanner, tableId)
+              .setShardProvider(FixedShardProvider.create("SHARD_ID", shard))
+              .build();
+      watcher.addCallback(
+          new RowChangeCallback() {
+            @Override
+            public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+              System.out.printf(
+                  "Received change for table %s: %s%n", table, row.asStruct().toString());
+              latch.countDown();
+            }
+          });
+      watcher.startAsync();
+      watchers.add(watcher);
+    }
+    // Wait for all watchers to have started.
+    for (SpannerTableChangeWatcher watcher : watchers) {
+      watcher.awaitRunning();
+    }
+    System.out.println("Started change watcher");
+
+    // Wait until we have received 3 changes.
+    latch.await();
+    System.out.println("Received 3 changes, stopping change watcher");
+    // Stop the pollers and wait for them to release all resources.
+    for (SpannerTableChangeWatcher watcher : watchers) {
+      watcher.stopAsync();
+    }
+    for (SpannerTableChangeWatcher watcher : watchers) {
+      watcher.awaitTerminated();
+    }
+  }
+
+  /**
+   * Watch a table using a an automatic time based sharding algorithm. The sample assumes that the
+   * given table has the following structure:
+   *
+   * <pre>{@code
+   * CREATE TABLE MY_TABLE (
+   *   ID            INT64,
+   *   NAME          STRING(MAX),
+   *   SHARD_ID      STRING(MAX),
+   *   LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+   * ) PRIMARY KEY (ID);
+   *
+   * CREATE INDEX IDX_MY_TABLE_SHARD_ID ON MY_TABLE (SHARD_ID, LAST_MODIFIED_AT);
+   * }</pre>
+   */
+  public static void watchTableWithTimebasedShardProviderExample(
       String project, // "my-project"
       String instance, // "my-instance"
       String database, // "my-database"
@@ -416,10 +483,6 @@ public class Samples {
           public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
             System.out.printf(
                 "Received change for table %s: %s%n", table, row.asStruct().toString());
-
-            System.err.printf(
-                "DEBUG: Received change for table %s: %s%n", table, row.asStruct().toString());
-
             latch.countDown();
           }
         });

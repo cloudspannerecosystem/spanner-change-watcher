@@ -17,6 +17,8 @@
 package com.google.cloud.spanner.watcher;
 
 import com.google.cloud.spanner.Statement;
+import com.google.cloud.spanner.Value;
+import javax.annotation.Nullable;
 
 /**
  * Interface for providing a shard id for Spanner Table Change watchers. The shard id will be used
@@ -29,4 +31,11 @@ public interface ShardProvider {
    * one or more parameters or a combination of both.
    */
   void appendShardFilter(Statement.Builder statementBuilder);
+
+  /**
+   * Returns the (fixed) value that is used by this {@link ShardProvider}. This value could be
+   * <code>null</code> if the {@link ShardProvider} does not use a fixed value.
+   */
+  @Nullable
+  Value getShardValue();
 }
