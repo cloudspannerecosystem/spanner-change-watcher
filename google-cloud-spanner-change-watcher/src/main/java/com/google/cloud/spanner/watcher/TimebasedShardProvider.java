@@ -20,44 +20,68 @@ import com.google.cloud.spanner.ReadContext;
 import com.google.cloud.spanner.ResultSet;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.Value;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 /**
  * Implementation of {@link ShardProvider} that generates a {@link ShardId} based on the current
  * system time of Cloud Spanner. The generated shard id groups a set of commit timestamps together.
- * The {@link TimeBasedShardProvider} can only be used when all clients that write to the tables
+ * The {@link TimebasedShardProvider} can only be used when all clients that write to the tables
  * that are being watched update the shard column with the most recent shard id for each update that
  * is written to the tables.
  *
  * @see Samples#watchTableWithTimebasedShardProviderExample(String, String, String, String) for an
  *     example on how to use this {@link ShardProvider}.
  */
-public final class TimeBasedShardProvider implements ShardProvider {
+public final class TimebasedShardProvider implements ShardProvider {
   static final String PREVIOUS_SHARD_FUNCTION_FORMAT =
       "TO_BASE64(SHA512(FORMAT_TIMESTAMP('%s', TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL %d SECOND), 'UTC')))";
   static final String CURRENT_SHARD_FUNCTION_FORMAT =
       "TO_BASE64(SHA512(FORMAT_TIMESTAMP('%s', CURRENT_TIMESTAMP(), 'UTC')))";
+  static final ZoneId UTC_ID = ZoneId.of("UTC");
 
   public enum Interval {
     DAY("%F", false),
     WEEK("%Y-%W", false),
-    MONTH("%Y-%m", false),
+    MONTH("%yyyy-%m", false),
     YEAR("%Y", false),
+
+    MINUTE("%M", "mm", true, 45),
+    HOUR("%H", "HH", true),
 
     DAY_OF_WEEK("%u", true),
     DAY_OF_MONTH("%d", true),
     WEEK_OF_YEAR("%W", true),
     DAY_OF_YEAR("%j", true);
 
-    private final String dateFormat;
+    private final String cloudSpannerDateFormat;
+    private final DateTimeFormatter refreshIntervalDateFormat;
     private final boolean cyclic;
     private final String shardIdExpression;
     private final Statement currentShardIdStatement;
+    private int defaultPreviousShardSeconds;
 
-    private Interval(String dateFormat, boolean cyclic) {
-      this.dateFormat = dateFormat;
+    private Interval(String cloudSpannerDateFormat, boolean cyclic) {
+      this(cloudSpannerDateFormat, "yyyy-MM-dd", cyclic, 60);
+    }
+
+    private Interval(String cloudSpannerDateFormat, String localDateFormat, boolean cyclic) {
+      this(cloudSpannerDateFormat, localDateFormat, cyclic, 60);
+    }
+
+    private Interval(
+        String cloudSpannerDateFormat,
+        String javaDateFormat,
+        boolean cyclic,
+        int defaultPreviousShardSeconds) {
+      this.cloudSpannerDateFormat = cloudSpannerDateFormat;
+      this.refreshIntervalDateFormat = DateTimeFormatter.ofPattern(javaDateFormat, Locale.US);
       this.cyclic = cyclic;
-      this.shardIdExpression = String.format(CURRENT_SHARD_FUNCTION_FORMAT, dateFormat);
+      this.shardIdExpression = String.format(CURRENT_SHARD_FUNCTION_FORMAT, cloudSpannerDateFormat);
       this.currentShardIdStatement = Statement.of("SELECT " + shardIdExpression);
+      this.defaultPreviousShardSeconds = defaultPreviousShardSeconds;
     }
 
     /**
@@ -70,10 +94,11 @@ public final class TimeBasedShardProvider implements ShardProvider {
      * that for example a shard id based on {@link Interval#DAY} will change at the moment that the
      * current system time in UTC changes 23:59 to 00:00.
      */
-    public String getCurrentShardId(ReadContext readContext) {
+    public TimebasedShardId getCurrentShardId(ReadContext readContext) {
+      LocalDateTime fetchTime = LocalDateTime.now(UTC_ID);
       try (ResultSet rs = readContext.executeQuery(currentShardIdStatement)) {
         if (rs.next()) {
-          return rs.getString(0);
+          return new TimebasedShardId(Value.string(rs.getString(0)), this, fetchTime);
         }
         throw new IllegalStateException("Shard expression did not return any results");
       }
@@ -90,7 +115,7 @@ public final class TimeBasedShardProvider implements ShardProvider {
     }
 
     String getDateFormat() {
-      return dateFormat;
+      return cloudSpannerDateFormat;
     }
 
     /**
@@ -103,9 +128,38 @@ public final class TimeBasedShardProvider implements ShardProvider {
     }
   }
 
-  /** Creates a {@link TimeBasedShardProvider} for the given database column and interval. */
-  public static TimeBasedShardProvider create(String column, Interval interval) {
-    return new TimeBasedShardProvider(column, interval);
+  /** A generated timebased shard id that has been fetched from Cloud Spanner. */
+  public static final class TimebasedShardId {
+    private final Value value;
+    private final Interval interval;
+    private final LocalDateTime fetchTime;
+
+    private TimebasedShardId(Value value, Interval interval, LocalDateTime fetchTime) {
+      this.value = value;
+      this.interval = interval;
+      this.fetchTime = fetchTime;
+    }
+
+    /**
+     * Returns true if this {@link TimebasedShardId} should be refreshed based on the current system
+     * time. This method depends on the current system time. If the system time is too much out of
+     * sync with the actual time, it can return invalid values. A system time that is less than 10
+     * seconds out of sync is not a problem.
+     */
+    public boolean shouldRefresh() {
+      return !fetchTime
+          .format(interval.refreshIntervalDateFormat)
+          .equals(LocalDateTime.now(UTC_ID).format(interval.refreshIntervalDateFormat));
+    }
+
+    public Value getValue() {
+      return value;
+    }
+  }
+
+  /** Creates a {@link TimebasedShardProvider} for the given database column and interval. */
+  public static TimebasedShardProvider create(String column, Interval interval) {
+    return new TimebasedShardProvider(column, interval);
   }
 
   private final String column;
@@ -113,15 +167,17 @@ public final class TimeBasedShardProvider implements ShardProvider {
   private final String previousShardExpression;
   private final String sqlAppendment;
 
-  TimeBasedShardProvider(String column, Interval interval) {
-    this(column, interval, 60);
+  TimebasedShardProvider(String column, Interval interval) {
+    this(column, interval, interval.defaultPreviousShardSeconds);
   }
 
-  TimeBasedShardProvider(String column, Interval interval, int previousShardSeconds) {
+  TimebasedShardProvider(String column, Interval interval, int previousShardSeconds) {
     this.column = column;
-    this.shardExpression = String.format(CURRENT_SHARD_FUNCTION_FORMAT, interval.dateFormat);
+    this.shardExpression =
+        String.format(CURRENT_SHARD_FUNCTION_FORMAT, interval.cloudSpannerDateFormat);
     this.previousShardExpression =
-        String.format(PREVIOUS_SHARD_FUNCTION_FORMAT, interval.dateFormat, previousShardSeconds);
+        String.format(
+            PREVIOUS_SHARD_FUNCTION_FORMAT, interval.cloudSpannerDateFormat, previousShardSeconds);
     this.sqlAppendment =
         String.format(
             " AND `%s` IN (%s, %s)",

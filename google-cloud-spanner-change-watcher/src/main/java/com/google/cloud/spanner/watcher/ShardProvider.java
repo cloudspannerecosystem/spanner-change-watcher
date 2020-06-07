@@ -24,6 +24,9 @@ import javax.annotation.Nullable;
  * Interface for providing a shard id for Spanner Table Change watchers. The shard id will be used
  * by the change watcher when querying the table for the most recent changes. This can be used to
  * prevent full table scans when polling a table.
+ *
+ * <p>See https://cloud.google.com/spanner/docs/schema-design#fix_hash_the_key for more information
+ * on how logical shards should be implemented in Cloud Spanner.
  */
 public interface ShardProvider {
   /**
@@ -33,8 +36,10 @@ public interface ShardProvider {
   void appendShardFilter(Statement.Builder statementBuilder);
 
   /**
-   * Returns the (fixed) value that is used by this {@link ShardProvider}. This value could be
-   * <code>null</code> if the {@link ShardProvider} does not use a fixed value.
+   * Returns the (fixed) value that is used by this {@link ShardProvider}. This value will be passed
+   * to the {@link CommitTimestampRepository} to indicate the last seen commit timestamp for a
+   * certain shard. This value will be <code>null</code> if the {@link ShardProvider} does not use a
+   * fixed value.
    */
   @Nullable
   Value getShardValue();

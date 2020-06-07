@@ -24,7 +24,7 @@ import com.google.cloud.spanner.MockSpannerServiceImpl.StatementResult;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.Statement;
-import com.google.cloud.spanner.watcher.TimeBasedShardProvider.Interval;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider.Interval;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ListValue;
 import com.google.protobuf.Value;
@@ -495,11 +495,11 @@ public abstract class AbstractMockServerTest {
               String.format(SpannerTableTailer.POLL_QUERY, "`Foo`", "LastModified")
                   + " AND `ShardId` IN ("
                   + String.format(
-                      TimeBasedShardProvider.CURRENT_SHARD_FUNCTION_FORMAT,
+                      TimebasedShardProvider.CURRENT_SHARD_FUNCTION_FORMAT,
                       Interval.DAY.getDateFormat())
                   + ", "
                   + String.format(
-                      TimeBasedShardProvider.PREVIOUS_SHARD_FUNCTION_FORMAT,
+                      TimebasedShardProvider.PREVIOUS_SHARD_FUNCTION_FORMAT,
                       Interval.DAY.getDateFormat(),
                       60)
                   + ")"

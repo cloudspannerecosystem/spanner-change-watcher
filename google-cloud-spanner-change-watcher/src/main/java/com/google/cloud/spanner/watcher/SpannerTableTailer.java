@@ -88,12 +88,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
           SpannerCommitTimestampRepository.newBuilder(spanner, table.getDatabaseId()).build();
     }
 
-    /**
-     * Sets a dynamic {@link ShardProvider} that this {@link SpannerTableTailer} should use for
-     * automaticy sharding.
-     */
+    /** Sets the {@link ShardProvider} that this {@link SpannerTableTailer} should use. */
     public Builder setShardProvider(ShardProvider provider) {
-      this.shardProvider = Preconditions.checkNotNull(provider);
+      this.shardProvider = provider;
       return this;
     }
 
@@ -319,6 +316,8 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
     }
   }
 
+  volatile boolean polling = false;
+
   class SpannerTailerRunner implements Runnable {
     @Override
     public void run() {
@@ -343,6 +342,15 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                       .to(lastSeenCommitTimestamp)
                       .build())) {
         currentPollFuture = rs.setCallback(executor, new SpannerTailerCallback());
+        polling = true;
+        currentPollFuture.addListener(
+            new Runnable() {
+              @Override
+              public void run() {
+                polling = false;
+              }
+            },
+            MoreExecutors.directExecutor());
       }
     }
   }

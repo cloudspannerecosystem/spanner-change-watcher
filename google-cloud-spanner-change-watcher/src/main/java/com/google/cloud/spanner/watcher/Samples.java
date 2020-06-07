@@ -31,7 +31,8 @@ import com.google.cloud.spanner.TransactionRunner.TransactionCallable;
 import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
-import com.google.cloud.spanner.watcher.TimeBasedShardProvider.Interval;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider.Interval;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider.TimebasedShardId;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import java.util.LinkedList;
@@ -395,7 +396,7 @@ public class Samples {
    *   LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)
    * ) PRIMARY KEY (ID);
    *
-   * CREATE INDEX IDX_MY_TABLE_SHARD_ID ON MY_TABLE (SHARD_ID, LAST_MODIFIED_AT);
+   * CREATE INDEX IDX_MY_TABLE_SHARD_ID ON MY_TABLE (SHARD_ID, LAST_MODIFIED_AT DESC);
    * }</pre>
    */
   public static void watchTableWithShardingExample(
@@ -460,7 +461,7 @@ public class Samples {
    *   LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)
    * ) PRIMARY KEY (ID);
    *
-   * CREATE INDEX IDX_MY_TABLE_SHARD_ID ON MY_TABLE (SHARD_ID, LAST_MODIFIED_AT);
+   * CREATE INDEX IDX_MY_TABLE_SHARD_ID ON MY_TABLE (SHARD_ID, LAST_MODIFIED_AT DESC);
    * }</pre>
    */
   public static void watchTableWithTimebasedShardProviderExample(
@@ -475,7 +476,7 @@ public class Samples {
     SpannerTableChangeWatcher watcher =
         SpannerTableTailer.newBuilder(spanner, tableId)
             // Automatically create a new shard id for each day.
-            .setShardProvider(TimeBasedShardProvider.create("SHARD_ID", Interval.DAY))
+            .setShardProvider(TimebasedShardProvider.create("SHARD_ID", Interval.DAY))
             .build();
     watcher.addCallback(
         new RowChangeCallback() {
@@ -496,7 +497,7 @@ public class Samples {
 
     // Write data using mutations. We first need to get the shard id that we should use for the
     // change.
-    String currentShardId = Interval.DAY.getCurrentShardId(client.singleUse());
+    TimebasedShardId currentShardId = Interval.DAY.getCurrentShardId(client.singleUse());
     client.write(
         ImmutableList.of(
             Mutation.newInsertBuilder(table)
@@ -505,7 +506,7 @@ public class Samples {
                 .set("NAME")
                 .to("Name 1")
                 .set("SHARD_ID")
-                .to(currentShardId)
+                .to(currentShardId.getValue())
                 .set("LAST_MODIFIED")
                 .to(Value.COMMIT_TIMESTAMP)
                 .build()));

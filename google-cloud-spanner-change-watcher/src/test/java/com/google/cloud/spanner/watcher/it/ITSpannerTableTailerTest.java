@@ -33,8 +33,9 @@ import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import com.google.cloud.spanner.watcher.SpannerTableTailer;
 import com.google.cloud.spanner.watcher.TableId;
-import com.google.cloud.spanner.watcher.TimeBasedShardProvider;
-import com.google.cloud.spanner.watcher.TimeBasedShardProvider.Interval;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider.Interval;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider.TimebasedShardId;
 import com.google.cloud.spanner.watcher.it.SpannerTestHelper.ITSpannerEnv;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
@@ -69,7 +70,7 @@ public class ITSpannerTableTailerTest {
             ImmutableList.of(
                 "CREATE TABLE NUMBERS (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE TABLE NUMBERS_WITH_SHARDS (ID INT64 NOT NULL, NAME STRING(100), SHARD_ID STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
-                "CREATE INDEX IDX_NUMBERS_SHARDS ON NUMBERS_WITH_SHARDS (SHARD_ID, LAST_MODIFIED)"));
+                "CREATE INDEX IDX_NUMBERS_SHARDS ON NUMBERS_WITH_SHARDS (SHARD_ID, LAST_MODIFIED DESC)"));
     logger.info(String.format("Created database %s", database.getId().toString()));
   }
 
@@ -267,7 +268,7 @@ public class ITSpannerTableTailerTest {
     Spanner spanner = env.getSpanner();
     SpannerTableTailer tailer =
         SpannerTableTailer.newBuilder(spanner, TableId.of(database.getId(), "NUMBERS_WITH_SHARDS"))
-            .setShardProvider(TimeBasedShardProvider.create("SHARD_ID", Interval.DAY))
+            .setShardProvider(TimebasedShardProvider.create("SHARD_ID", Interval.DAY))
             .setPollInterval(Duration.ofMillis(10L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
@@ -290,7 +291,7 @@ public class ITSpannerTableTailerTest {
     DatabaseClient client = spanner.getDatabaseClient(database.getId());
     latch = new CountDownLatch(3);
 
-    String currentShard = Interval.DAY.getCurrentShardId(client.singleUse());
+    TimebasedShardId currentShard = Interval.DAY.getCurrentShardId(client.singleUse());
     Timestamp commitTs =
         client.writeAtLeastOnce(
             Arrays.asList(
@@ -300,7 +301,7 @@ public class ITSpannerTableTailerTest {
                     .set("NAME")
                     .to("ONE")
                     .set("SHARD_ID")
-                    .to(currentShard)
+                    .to(currentShard.getValue())
                     .set("LAST_MODIFIED")
                     .to(Value.COMMIT_TIMESTAMP)
                     .build(),
@@ -310,7 +311,7 @@ public class ITSpannerTableTailerTest {
                     .set("NAME")
                     .to("TWO")
                     .set("SHARD_ID")
-                    .to(currentShard)
+                    .to(currentShard.getValue())
                     .set("LAST_MODIFIED")
                     .to(Value.COMMIT_TIMESTAMP)
                     .build(),
@@ -320,7 +321,7 @@ public class ITSpannerTableTailerTest {
                     .set("NAME")
                     .to("THREE")
                     .set("SHARD_ID")
-                    .to(currentShard)
+                    .to(currentShard.getValue())
                     .set("LAST_MODIFIED")
                     .to(Value.COMMIT_TIMESTAMP)
                     .build()));
@@ -335,7 +336,7 @@ public class ITSpannerTableTailerTest {
                 .set("NAME")
                 .to("ONE")
                 .set("SHARD_ID")
-                .to(currentShard)
+                .to(currentShard.getValue())
                 .set("LAST_MODIFIED")
                 .to(commitTs)
                 .build(),
@@ -345,7 +346,7 @@ public class ITSpannerTableTailerTest {
                 .set("NAME")
                 .to("TWO")
                 .set("SHARD_ID")
-                .to(currentShard)
+                .to(currentShard.getValue())
                 .set("LAST_MODIFIED")
                 .to(commitTs)
                 .build(),
@@ -355,13 +356,15 @@ public class ITSpannerTableTailerTest {
                 .set("NAME")
                 .to("THREE")
                 .set("SHARD_ID")
-                .to(currentShard)
+                .to(currentShard.getValue())
                 .set("LAST_MODIFIED")
                 .to(commitTs)
                 .build());
 
     latch = new CountDownLatch(2);
-    currentShard = Interval.DAY.getCurrentShardId(client.singleUse());
+    if (currentShard.shouldRefresh()) {
+      currentShard = Interval.DAY.getCurrentShardId(client.singleUse());
+    }
     commitTs =
         client.writeAtLeastOnce(
             Arrays.asList(
@@ -371,7 +374,7 @@ public class ITSpannerTableTailerTest {
                     .set("NAME")
                     .to("FOUR")
                     .set("SHARD_ID")
-                    .to(currentShard)
+                    .to(currentShard.getValue())
                     .set("LAST_MODIFIED")
                     .to(Value.COMMIT_TIMESTAMP)
                     .build(),
@@ -381,7 +384,7 @@ public class ITSpannerTableTailerTest {
                     .set("NAME")
                     .to("FIVE")
                     .set("SHARD_ID")
-                    .to(currentShard)
+                    .to(currentShard.getValue())
                     .set("LAST_MODIFIED")
                     .to(Value.COMMIT_TIMESTAMP)
                     .build()));
@@ -396,7 +399,7 @@ public class ITSpannerTableTailerTest {
                 .set("NAME")
                 .to("FOUR")
                 .set("SHARD_ID")
-                .to(currentShard)
+                .to(currentShard.getValue())
                 .set("LAST_MODIFIED")
                 .to(commitTs)
                 .build(),
@@ -406,13 +409,15 @@ public class ITSpannerTableTailerTest {
                 .set("NAME")
                 .to("FIVE")
                 .set("SHARD_ID")
-                .to(currentShard)
+                .to(currentShard.getValue())
                 .set("LAST_MODIFIED")
                 .to(commitTs)
                 .build());
 
     latch = new CountDownLatch(2);
-    currentShard = Interval.DAY.getCurrentShardId(client.singleUse());
+    if (currentShard.shouldRefresh()) {
+      currentShard = Interval.DAY.getCurrentShardId(client.singleUse());
+    }
     commitTs =
         client.writeAtLeastOnce(
             Arrays.asList(
@@ -422,7 +427,7 @@ public class ITSpannerTableTailerTest {
                     .set("NAME")
                     .to("one")
                     .set("SHARD_ID")
-                    .to(currentShard)
+                    .to(currentShard.getValue())
                     .set("LAST_MODIFIED")
                     .to(Value.COMMIT_TIMESTAMP)
                     .build(),
@@ -432,7 +437,7 @@ public class ITSpannerTableTailerTest {
                     .set("NAME")
                     .to("five")
                     .set("SHARD_ID")
-                    .to(currentShard)
+                    .to(currentShard.getValue())
                     .set("LAST_MODIFIED")
                     .to(Value.COMMIT_TIMESTAMP)
                     .build()));
@@ -447,7 +452,7 @@ public class ITSpannerTableTailerTest {
                 .set("NAME")
                 .to("one")
                 .set("SHARD_ID")
-                .to(currentShard)
+                .to(currentShard.getValue())
                 .set("LAST_MODIFIED")
                 .to(commitTs)
                 .build(),
@@ -457,7 +462,7 @@ public class ITSpannerTableTailerTest {
                 .set("NAME")
                 .to("five")
                 .set("SHARD_ID")
-                .to(currentShard)
+                .to(currentShard.getValue())
                 .set("LAST_MODIFIED")
                 .to(commitTs)
                 .build());

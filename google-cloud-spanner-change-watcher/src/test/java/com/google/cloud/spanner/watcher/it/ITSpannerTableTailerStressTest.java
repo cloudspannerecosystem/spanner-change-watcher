@@ -36,8 +36,12 @@ import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import com.google.cloud.spanner.watcher.SpannerTableTailer;
 import com.google.cloud.spanner.watcher.TableId;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider.Interval;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider.TimebasedShardId;
 import com.google.cloud.spanner.watcher.it.SpannerTestHelper.ITSpannerEnv;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
@@ -73,16 +77,24 @@ public class ITSpannerTableTailerStressTest {
   static final String TABLE_NAME = "TEST_TABLE";
   static final String CREATE_TABLE =
       "CREATE TABLE %s (\n"
-          + "  ColInt64      INT64       NOT NULL,\n"
-          + "  ColFloat64    FLOAT64     NOT NULL,\n"
-          + "  ColBool       BOOL        NOT NULL,\n"
-          + "  ColString     STRING(100) NOT NULL,\n"
-          + "  ColStringMax  STRING(MAX) NOT NULL,\n"
-          + "  ColBytes      BYTES(100)  NOT NULL,\n"
-          + "  ColBytesMax   BYTES(MAX)  NOT NULL,\n"
-          + "  ColDate       DATE        NOT NULL,\n"
-          + "  ColTimestamp  TIMESTAMP   NOT NULL,\n"
-          + "  ColCommitTS   TIMESTAMP   NOT NULL OPTIONS (allow_commit_timestamp=true),\n"
+          + "  ColInt64       INT64       NOT NULL,\n"
+          + "  ColFloat64     FLOAT64     NOT NULL,\n"
+          + "  ColBool        BOOL        NOT NULL,\n"
+          + "  ColString      STRING(100) NOT NULL,\n"
+          + "  ColStringMax   STRING(MAX) NOT NULL,\n"
+          + "  ColBytes       BYTES(100)  NOT NULL,\n"
+          + "  ColBytesMax    BYTES(MAX)  NOT NULL,\n"
+          + "  ColDate        DATE        NOT NULL,\n"
+          + "  ColTimestamp   TIMESTAMP   NOT NULL,\n"
+          + "  ColShardId     STRING(MAX)         ,\n"
+          + "  ShardInt64     INT64               ,\n"
+          + "  ShardFloat64   FLOAT64             ,\n"
+          + "  ShardBool      BOOL                ,\n"
+          + "  ShardString    STRING(100)         ,\n"
+          + "  ShardBytes     BYTES(100)          ,\n"
+          + "  ShardDate      DATE                ,\n"
+          + "  ShardTimestamp TIMESTAMP           ,\n"
+          + "  ColCommitTS    TIMESTAMP   NOT NULL OPTIONS (allow_commit_timestamp=true),\n"
           + "  \n"
           + "  ColInt64Array     ARRAY<INT64>,\n"
           + "  ColFloat64Array   ARRAY<FLOAT64>,\n"
@@ -94,6 +106,7 @@ public class ITSpannerTableTailerStressTest {
           + "  ColDateArray      ARRAY<DATE>,\n"
           + "  ColTimestampArray ARRAY<TIMESTAMP>\n"
           + ") PRIMARY KEY (ColInt64)\n";
+  static final String CREATE_SHARD_INDEX = "CREATE INDEX IDX_%s_SHARD ON %s (ColShardId)";
   private static final Random rnd = new Random();
 
   @Parameter(0)
@@ -127,7 +140,11 @@ public class ITSpannerTableTailerStressTest {
   @BeforeClass
   public static void setup() throws Exception {
     SpannerTestHelper.setupSpanner(env);
-    database = env.createTestDb(Collections.singleton(String.format(CREATE_TABLE, TABLE_NAME)));
+    database =
+        env.createTestDb(
+            ImmutableList.of(
+                String.format(CREATE_TABLE, TABLE_NAME),
+                String.format(CREATE_SHARD_INDEX, TABLE_NAME, TABLE_NAME)));
     logger.info(String.format("Created database %s", database.getId().toString()));
   }
 
@@ -155,6 +172,8 @@ public class ITSpannerTableTailerStressTest {
                 SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
                     .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
                     .build())
+            // Use timebased automatic sharding of the table.
+            .setShardProvider(TimebasedShardProvider.create("ColShardId", Interval.MINUTE))
             .build();
     final CountDownLatch latch = new CountDownLatch(1);
     watcher.addCallback(
@@ -197,6 +216,8 @@ public class ITSpannerTableTailerStressTest {
   final class GenerateChangesCallable implements Callable<Void> {
     private final DatabaseClient client;
     private final int numChanges;
+    private final Interval shardInterval = Interval.MINUTE;
+    private TimebasedShardId currentShardId;
 
     GenerateChangesCallable(DatabaseClient client, int numChanges) {
       this.client = client;
@@ -206,7 +227,12 @@ public class ITSpannerTableTailerStressTest {
     @Override
     public Void call() {
       for (int i = 0; i < numChanges; i++) {
-        Mutation mutation = createRandomMutation(TABLE_NAME, changeCount);
+        // Check if we need to refresh the shard value.
+        if (currentShardId == null || currentShardId.shouldRefresh()) {
+          currentShardId = shardInterval.getCurrentShardId(client.singleUse());
+        }
+        Mutation mutation =
+            createRandomMutation(TABLE_NAME, "ColShardId", currentShardId.getValue(), changeCount);
         Timestamp ts = client.write(Collections.singleton(mutation));
         sentChanges.incrementAndGet();
         Long key = mutation.asMap().get("ColInt64").getInt64();
@@ -221,10 +247,16 @@ public class ITSpannerTableTailerStressTest {
     }
   }
 
-  static Mutation createRandomMutation(String table, int changeCount) {
+  static Mutation createRandomMutation(
+      String table, String shardColumn, Value shardValue, int changeCount) {
+    return createRandomMutation(table, rnd.nextInt(changeCount / 2), shardColumn, shardValue);
+  }
+
+  static Mutation createRandomMutation(
+      String table, long id, String shardColumn, Value shardValue) {
     return Mutation.newInsertOrUpdateBuilder(table)
         .set("ColInt64")
-        .to(rnd.nextInt(changeCount / 2))
+        .to(id)
         .set("ColFloat64")
         .to(rnd.nextDouble())
         .set("ColBool")
@@ -241,6 +273,8 @@ public class ITSpannerTableTailerStressTest {
         .to(randomDate())
         .set("ColTimestamp")
         .to(randomTimestamp())
+        .set(shardColumn)
+        .to(shardValue)
         .set("ColCommitTS")
         .to(Value.COMMIT_TIMESTAMP)
         .set("ColInt64Array")

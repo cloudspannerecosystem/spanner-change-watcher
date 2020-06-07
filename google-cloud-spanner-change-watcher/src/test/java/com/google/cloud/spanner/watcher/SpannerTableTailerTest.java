@@ -28,7 +28,7 @@ import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
-import com.google.cloud.spanner.watcher.TimeBasedShardProvider.Interval;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider.Interval;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Status;
 import java.util.Random;
@@ -289,7 +289,7 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
     final CountDownLatch latch = new CountDownLatch(SELECT_FOO_WITH_SHARDING_PER_DAY_ROW_COUNT);
     SpannerTableTailer tailer =
         SpannerTableTailer.newBuilder(spanner, TableId.of(db, "Foo"))
-            .setShardProvider(TimeBasedShardProvider.create("ShardId", Interval.DAY))
+            .setShardProvider(TimebasedShardProvider.create("ShardId", Interval.DAY))
             .setPollInterval(Duration.ofMillis(10L))
             .setCommitTimestampRepository(
                 SpannerCommitTimestampRepository.newBuilder(spanner, db)

@@ -29,14 +29,24 @@ public interface CommitTimestampRepository {
   /** Returns the last seen commit timestamp for the given table. */
   Timestamp get(TableId table);
 
-  default Timestamp get(TableId table, @Nullable Value shardValue) {
+  /**
+   * Returns the last seen commit timestamp for the given table and shard value. This method is
+   * optional and the default implementation will throw {@link UnsupportedOperationException}.
+   */
+  default Timestamp get(TableId table, @Nullable Value shardValue)
+      throws UnsupportedOperationException {
     throw new UnsupportedOperationException();
   }
 
   /** Sets the last seen commit timestamp for the given table. */
   void set(TableId table, Timestamp commitTimestamp);
 
-  default void set(TableId table, @Nullable Value shardValue, Timestamp timestamp) {
+  /**
+   * Sets the last seen commit timestamp for the given table and shard value. This method is
+   * optional and the default implementation will throw {@link UnsupportedOperationException}.
+   */
+  default void set(TableId table, @Nullable Value shardValue, Timestamp timestamp)
+      throws UnsupportedOperationException {
     throw new UnsupportedOperationException();
   }
 }
