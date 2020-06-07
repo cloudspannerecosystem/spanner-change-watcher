@@ -16,6 +16,7 @@
 
 package com.google.cloud.spanner.watcher;
 
+import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.ReadContext;
 import com.google.cloud.spanner.ResultSet;
 import com.google.cloud.spanner.Statement;
@@ -24,6 +25,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import javax.annotation.Nullable;
 
 /**
  * Implementation of {@link ShardProvider} that generates a {@link ShardId} based on the current
@@ -43,17 +45,32 @@ public final class TimebasedShardProvider implements ShardProvider {
   static final ZoneId UTC_ID = ZoneId.of("UTC");
 
   public enum Interval {
+    /** Creates a shard for each unique date. */
     DAY("%F", false),
+    /** Creates a shard for each week and year. */
     WEEK("%Y-%W", false),
+    /** Creates a shard for each month and year. */
     MONTH("%yyyy-%m", false),
+    /** Creates a shard for each year. */
     YEAR("%Y", false),
 
-    MINUTE("%M", "mm", true, 45),
-    HOUR("%H", "HH", true),
+    /**
+     * {@link #MINUTE_OF_HOUR} is mainly intended for testing purposes. Creates a cyclic shard for
+     * each minute of an hour (0-59). Using {@link #MINUTE_OF_HOUR} means that the shard value will
+     * change very frequently, and transactions that run longer than 1 minute will potentially
+     * receive the wrong shard value.
+     */
+    MINUTE_OF_HOUR("%M", "mm", true, 45),
+    /** Creates a cyclic shard for each hour of a day (0-23). */
+    HOUR_OF_DAY("%H", "HH", true),
 
+    /** Creates a cyclic shard for each weekday (1-7). */
     DAY_OF_WEEK("%u", true),
+    /** Creates a cyclic shard for each day of month (1-31). */
     DAY_OF_MONTH("%d", true),
+    /** Creates a cyclic shard for each week of year (1-53). */
     WEEK_OF_YEAR("%W", true),
+    /** Creates a cyclic shard for each day of year (1-366). */
     DAY_OF_YEAR("%j", true);
 
     private final String cloudSpannerDateFormat;
@@ -152,6 +169,10 @@ public final class TimebasedShardProvider implements ShardProvider {
           .equals(LocalDateTime.now(UTC_ID).format(interval.refreshIntervalDateFormat));
     }
 
+    /**
+     * Returns the {@link Value} that should be used to set on a {@link Mutation} when an
+     * insert/update is sent to the database.
+     */
     public Value getValue() {
       return value;
     }
@@ -190,6 +211,7 @@ public final class TimebasedShardProvider implements ShardProvider {
   }
 
   @Override
+  @Nullable
   public Value getShardValue() {
     // A TimeBasedShardProvider does not have a fixed value that should be used to separate
     // different commit timestamps in the commit timestamp repository.

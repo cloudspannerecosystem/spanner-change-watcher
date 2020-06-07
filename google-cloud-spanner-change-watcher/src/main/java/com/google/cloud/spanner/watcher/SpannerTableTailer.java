@@ -316,8 +316,6 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
     }
   }
 
-  volatile boolean polling = false;
-
   class SpannerTailerRunner implements Runnable {
     @Override
     public void run() {
@@ -342,15 +340,6 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                       .to(lastSeenCommitTimestamp)
                       .build())) {
         currentPollFuture = rs.setCallback(executor, new SpannerTailerCallback());
-        polling = true;
-        currentPollFuture.addListener(
-            new Runnable() {
-              @Override
-              public void run() {
-                polling = false;
-              }
-            },
-            MoreExecutors.directExecutor());
       }
     }
   }

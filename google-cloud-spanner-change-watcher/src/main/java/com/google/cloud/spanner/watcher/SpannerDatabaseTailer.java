@@ -86,7 +86,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
 
     /**
      * Sets the {@link ShardProvider} that this {@link SpannerDatabaseTailer} should use for all
-     * tables that does not have a specific {@link ShardProvider} set through {@link
+     * tables that do not have a specific {@link ShardProvider} set through {@link
      * #setShardProviders(Map)}.
      */
     public Builder setShardProvider(ShardProvider shardProvider);

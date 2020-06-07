@@ -173,7 +173,7 @@ public class ITSpannerTableTailerStressTest {
                     .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
                     .build())
             // Use timebased automatic sharding of the table.
-            .setShardProvider(TimebasedShardProvider.create("ColShardId", Interval.MINUTE))
+            .setShardProvider(TimebasedShardProvider.create("ColShardId", Interval.MINUTE_OF_HOUR))
             .build();
     final CountDownLatch latch = new CountDownLatch(1);
     watcher.addCallback(
@@ -216,7 +216,7 @@ public class ITSpannerTableTailerStressTest {
   final class GenerateChangesCallable implements Callable<Void> {
     private final DatabaseClient client;
     private final int numChanges;
-    private final Interval shardInterval = Interval.MINUTE;
+    private final Interval shardInterval = Interval.MINUTE_OF_HOUR;
     private TimebasedShardId currentShardId;
 
     GenerateChangesCallable(DatabaseClient client, int numChanges) {

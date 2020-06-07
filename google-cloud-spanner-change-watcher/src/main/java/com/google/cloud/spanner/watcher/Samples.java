@@ -450,7 +450,7 @@ public class Samples {
   }
 
   /**
-   * Watch a table using a an automatic time based sharding algorithm. The sample assumes that the
+   * Watch a table using an automatic time based sharding algorithm. The sample assumes that the
    * given table has the following structure:
    *
    * <pre>{@code
@@ -526,7 +526,7 @@ public class Samples {
                                     + "VALUES (@id, @name, %s, PENDING_COMMIT_TIMESTAMP())",
                                 // getShardIdExpression() returns the function that computes the
                                 // current shard id. Including this directly in the DML statement
-                                // instead of getting it from the database first saves us a
+                                // instead of fetching it from the database first saves us a
                                 // round-trip to the database.
                                 table, Interval.DAY.getShardIdExpression()))
                         .bind("id")
