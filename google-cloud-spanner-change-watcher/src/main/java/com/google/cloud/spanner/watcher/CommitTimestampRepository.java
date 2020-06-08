@@ -17,6 +17,8 @@
 package com.google.cloud.spanner.watcher;
 
 import com.google.cloud.Timestamp;
+import com.google.cloud.spanner.Value;
+import javax.annotation.Nullable;
 
 /**
  * Interface for storing the last seen commit timestamp by a {@link SpannerTableChangeWatcher} to a
@@ -27,6 +29,24 @@ public interface CommitTimestampRepository {
   /** Returns the last seen commit timestamp for the given table. */
   Timestamp get(TableId table);
 
+  /**
+   * Returns the last seen commit timestamp for the given table and shard value. This method is
+   * optional and the default implementation will throw {@link UnsupportedOperationException}.
+   */
+  default Timestamp get(TableId table, @Nullable Value shardValue)
+      throws UnsupportedOperationException {
+    throw new UnsupportedOperationException();
+  }
+
   /** Sets the last seen commit timestamp for the given table. */
   void set(TableId table, Timestamp commitTimestamp);
+
+  /**
+   * Sets the last seen commit timestamp for the given table and shard value. This method is
+   * optional and the default implementation will throw {@link UnsupportedOperationException}.
+   */
+  default void set(TableId table, @Nullable Value shardValue, Timestamp timestamp)
+      throws UnsupportedOperationException {
+    throw new UnsupportedOperationException();
+  }
 }

@@ -28,6 +28,7 @@ import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider.Interval;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Status;
 import java.util.Random;
@@ -106,7 +107,12 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
     Spanner spanner = getSpanner();
     DatabaseId db = DatabaseId.of("p", "i", "d");
     SpannerTableTailer tailer =
-        SpannerTableTailer.newBuilder(spanner, TableId.of(db, "NonExistingTable")).build();
+        SpannerTableTailer.newBuilder(spanner, TableId.of(db, "NonExistingTable"))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, db)
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
     SettableApiFuture<Boolean> res = SettableApiFuture.create();
     tailer.addListener(
         new Listener() {
@@ -273,5 +279,34 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
     // A custom executor should not be managed by the change watcher.
     assertThat(executor.isShutdown()).isFalse();
     executor.shutdown();
+  }
+
+  @Test
+  public void testAutomaticSharding() throws Exception {
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    final AtomicInteger receivedRows = new AtomicInteger();
+    final CountDownLatch latch = new CountDownLatch(SELECT_FOO_WITH_SHARDING_PER_DAY_ROW_COUNT);
+    SpannerTableTailer tailer =
+        SpannerTableTailer.newBuilder(spanner, TableId.of(db, "Foo"))
+            .setShardProvider(TimebasedShardProvider.create("ShardId", Interval.DAY))
+            .setPollInterval(Duration.ofMillis(10L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, db)
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            receivedRows.incrementAndGet();
+            latch.countDown();
+          }
+        });
+    tailer.startAsync().awaitRunning();
+    latch.await(5L, TimeUnit.SECONDS);
+    tailer.stopAsync().awaitTerminated();
+    assertThat(receivedRows.get()).isEqualTo(SELECT_FOO_WITH_SHARDING_PER_DAY_ROW_COUNT);
   }
 }

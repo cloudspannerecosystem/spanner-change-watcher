@@ -30,6 +30,9 @@ import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerExceptionFactory;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.Struct;
+import com.google.cloud.spanner.Type;
+import com.google.cloud.spanner.Type.Code;
+import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
 import com.google.spanner.admin.database.v1.UpdateDatabaseDdlMetadata;
 import java.util.Collections;
@@ -46,12 +49,19 @@ import javax.annotation.Nullable;
  *
  * <pre>{@code
  * CREATE TABLE LAST_SEEN_COMMIT_TIMESTAMPS (
- *        DATABASE_NAME STRING(MAX) NOT NULL,
- *        TABLE_CATALOG STRING(MAX) NOT NULL,
- *        TABLE_SCHEMA STRING(MAX) NOT NULL,
- *        TABLE_NAME STRING(MAX) NOT NULL,
+ *        DATABASE_NAME              STRING(MAX) NOT NULL,
+ *        TABLE_CATALOG              STRING(MAX) NOT NULL,
+ *        TABLE_SCHEMA               STRING(MAX) NOT NULL,
+ *        TABLE_NAME                 STRING(MAX) NOT NULL,
+ *        SHARD_ID_BOOL              BOOL,
+ *        SHARD_ID_BYTES             BYTES(MAX),
+ *        SHARD_ID_DATE              DATE,
+ *        SHARD_ID_FLOAT64           FLOAT64,
+ *        SHARD_ID_INT64             INT64,
+ *        SHARD_ID_STRING            STRING(MAX),
+ *        SHARD_ID_TIMESTAMP         TIMESTAMP,
  *        LAST_SEEN_COMMIT_TIMESTAMP TIMESTAMP NOT NULL
- * ) PRIMARY KEY (DATABASE_NAME, TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME)
+ * ) PRIMARY KEY (DATABASE_NAME, TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, SHARD_ID_BOOL, SHARD_ID_BYTES, SHARD_ID_DATE, SHARD_ID_FLOAT64, SHARD_ID_INT64, SHARD_ID_STRING, SHARD_ID_TIMESTAMP)
  * }</pre>
  *
  * The table name and column names are configurable.
@@ -67,6 +77,13 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
   static final String DEFAULT_TABLE_CATALOG_COLUMN_NAME = "TABLE_CATALOG";
   static final String DEFAULT_TABLE_SCHEMA_COLUMN_NAME = "TABLE_SCHEMA";
   static final String DEFAULT_TABLE_NAME_COLUMN_NAME = "TABLE_NAME";
+  static final String DEFAULT_SHARD_ID_BOOL_COLUMN_NAME = "SHARD_ID_BOOL";
+  static final String DEFAULT_SHARD_ID_BYTES_COLUMN_NAME = "SHARD_ID_BYTES";
+  static final String DEFAULT_SHARD_ID_DATE_COLUMN_NAME = "SHARD_ID_DATE";
+  static final String DEFAULT_SHARD_ID_FLOAT64_COLUMN_NAME = "SHARD_ID_FLOAT64";
+  static final String DEFAULT_SHARD_ID_INT64_COLUMN_NAME = "SHARD_ID_INT64";
+  static final String DEFAULT_SHARD_ID_STRING_COLUMN_NAME = "SHARD_ID_STRING";
+  static final String DEFAULT_SHARD_ID_TIMESTAMP_COLUMN_NAME = "SHARD_ID_TIMESTAMP";
   static final String DEFAULT_COMMIT_TIMESTAMP_COLUMN_NAME = "LAST_SEEN_COMMIT_TIMESTAMP";
   static final String FIND_TABLE_STATEMENT =
       "SELECT TABLE_NAME\n"
@@ -100,8 +117,15 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
           + "        `%s` STRING(MAX) NOT NULL,\n" // TABLE_CATALOG
           + "        `%s` STRING(MAX) NOT NULL,\n" // TABLE_SCHEMA
           + "        `%s` STRING(MAX) NOT NULL,\n" // TABLE_NAME
+          + "        `%s` BOOL,\n" // SHARD_ID_BOOL
+          + "        `%s` BYTES(MAX),\n" // SHARD_ID_BYTES
+          + "        `%s` DATE,\n" // SHARD_ID_DATE
+          + "        `%s` FLOAT64,\n" // SHARD_ID_FLOAT64
+          + "        `%s` INT64,\n" // SHARD_ID_INT64
+          + "        `%s` STRING(MAX),\n" // SHARD_ID_STRING
+          + "        `%s` TIMESTAMP,\n" // SHARD_ID_TIMESTAMP
           + "        `%s` TIMESTAMP NOT NULL\n" // LAST_SEEN_COMMIT_TIMESTAMP
-          + ") PRIMARY KEY (`%s`, `%s`, `%s`, `%s`)";
+          + ") PRIMARY KEY (`%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`)";
   private static final Set<String> RUNNING_CREATE_TABLE_STATEMENTS = new HashSet<>();
 
   /** Builder for a {@link SpannerCommitTimestampRepository}. */
@@ -116,6 +140,13 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
     private String catalogCol = DEFAULT_TABLE_CATALOG_COLUMN_NAME;
     private String schemaCol = DEFAULT_TABLE_SCHEMA_COLUMN_NAME;
     private String tableCol = DEFAULT_TABLE_NAME_COLUMN_NAME;
+    private String shardIdBoolCol = DEFAULT_SHARD_ID_BOOL_COLUMN_NAME;
+    private String shardIdBytesCol = DEFAULT_SHARD_ID_BYTES_COLUMN_NAME;
+    private String shardIdDateCol = DEFAULT_SHARD_ID_DATE_COLUMN_NAME;
+    private String shardIdFloat64Col = DEFAULT_SHARD_ID_FLOAT64_COLUMN_NAME;
+    private String shardIdInt64Col = DEFAULT_SHARD_ID_INT64_COLUMN_NAME;
+    private String shardIdStringCol = DEFAULT_SHARD_ID_STRING_COLUMN_NAME;
+    private String shardIdTimestampCol = DEFAULT_SHARD_ID_TIMESTAMP_COLUMN_NAME;
     private String tsCol = DEFAULT_COMMIT_TIMESTAMP_COLUMN_NAME;
     private Timestamp initialCommitTimestamp;
 
@@ -162,6 +193,41 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
       return this;
     }
 
+    public Builder setShardIdBoolColumn(String column) {
+      this.shardIdBoolCol = column;
+      return this;
+    }
+
+    public Builder setShardIdBytesColumn(String column) {
+      this.shardIdBytesCol = column;
+      return this;
+    }
+
+    public Builder setShardIdDateColumn(String column) {
+      this.shardIdDateCol = column;
+      return this;
+    }
+
+    public Builder setShardIdFloat64Column(String column) {
+      this.shardIdFloat64Col = column;
+      return this;
+    }
+
+    public Builder setShardIdInt64Column(String column) {
+      this.shardIdInt64Col = column;
+      return this;
+    }
+
+    public Builder setShardIdStringColumn(String column) {
+      this.shardIdStringCol = column;
+      return this;
+    }
+
+    public Builder setShardIdTimestampColumn(String column) {
+      this.shardIdTimestampCol = column;
+      return this;
+    }
+
     public Builder setCommitTimestampColumn(String column) {
       this.tsCol = Preconditions.checkNotNull(column);
       return this;
@@ -201,6 +267,13 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
   private final String catalogCol;
   private final String schemaCol;
   private final String tableCol;
+  private final String shardIdBoolCol;
+  private final String shardIdBytesCol;
+  private final String shardIdDateCol;
+  private final String shardIdFloat64Col;
+  private final String shardIdInt64Col;
+  private final String shardIdStringCol;
+  private final String shardIdTimestampCol;
   private final String tsCol;
   private final Iterable<String> tsColumns;
   private boolean initialized = false;
@@ -218,6 +291,13 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
     this.catalogCol = builder.catalogCol;
     this.schemaCol = builder.schemaCol;
     this.tableCol = builder.tableCol;
+    this.shardIdBoolCol = builder.shardIdBoolCol;
+    this.shardIdBytesCol = builder.shardIdBytesCol;
+    this.shardIdDateCol = builder.shardIdDateCol;
+    this.shardIdFloat64Col = builder.shardIdFloat64Col;
+    this.shardIdInt64Col = builder.shardIdInt64Col;
+    this.shardIdStringCol = builder.shardIdStringCol;
+    this.shardIdTimestampCol = builder.shardIdTimestampCol;
     this.tsCol = builder.tsCol;
     this.initialCommitTimestamp = builder.initialCommitTimestamp;
     this.tsColumns = Collections.singleton(builder.tsCol);
@@ -286,11 +366,25 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
             catalogCol,
             schemaCol,
             tableCol,
+            shardIdBoolCol,
+            shardIdBytesCol,
+            shardIdDateCol,
+            shardIdFloat64Col,
+            shardIdInt64Col,
+            shardIdStringCol,
+            shardIdTimestampCol,
             tsCol,
             databaseCol,
             catalogCol,
             schemaCol,
-            tableCol);
+            tableCol,
+            shardIdBoolCol,
+            shardIdBytesCol,
+            shardIdDateCol,
+            shardIdFloat64Col,
+            shardIdInt64Col,
+            shardIdStringCol,
+            shardIdTimestampCol);
     boolean tableAlreadyBeingCreated = false;
     synchronized (RUNNING_CREATE_TABLE_STATEMENTS) {
       tableAlreadyBeingCreated = RUNNING_CREATE_TABLE_STATEMENTS.contains(createTable);
@@ -366,6 +460,13 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
     boolean foundCatalogCol = false;
     boolean foundSchemaCol = false;
     boolean foundTableCol = false;
+    boolean foundShardIdBoolCol = false;
+    boolean foundShardIdBytesCol = false;
+    boolean foundShardIdDateCol = false;
+    boolean foundShardIdFloat64Col = false;
+    boolean foundShardIdInt64Col = false;
+    boolean foundShardIdStringCol = false;
+    boolean foundShardIdTimestampCol = false;
     boolean foundTsCol = false;
     try (ResultSet rs = client.singleUse().executeQuery(columnsStatement)) {
       while (rs.next()) {
@@ -385,6 +486,69 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
           foundCatalogCol = foundCatalogCol || col.equalsIgnoreCase(catalogCol);
           foundSchemaCol = foundSchemaCol || col.equalsIgnoreCase(schemaCol);
           foundTableCol = foundTableCol || col.equalsIgnoreCase(tableCol);
+        } else if (col.equalsIgnoreCase(shardIdBoolCol)) {
+          if (!rs.getString("SPANNER_TYPE").equals("BOOL")) {
+            throw SpannerExceptionFactory.newSpannerException(
+                ErrorCode.INVALID_ARGUMENT,
+                String.format(
+                    "Bool shard column %s is not of type BOOL, but of type %s",
+                    shardIdBoolCol, rs.getString("SPANNER_TYPE")));
+          }
+          foundShardIdBoolCol = true;
+        } else if (col.equalsIgnoreCase(shardIdBytesCol)) {
+          if (!rs.getString("SPANNER_TYPE").startsWith("BYTES")) {
+            throw SpannerExceptionFactory.newSpannerException(
+                ErrorCode.INVALID_ARGUMENT,
+                String.format(
+                    "Bytes shard column %s is not of type BYTES, but of type %s",
+                    shardIdBytesCol, rs.getString("SPANNER_TYPE")));
+          }
+          foundShardIdBytesCol = true;
+        } else if (col.equalsIgnoreCase(shardIdDateCol)) {
+          if (!rs.getString("SPANNER_TYPE").equals("DATE")) {
+            throw SpannerExceptionFactory.newSpannerException(
+                ErrorCode.INVALID_ARGUMENT,
+                String.format(
+                    "Date shard column %s is not of type DATE, but of type %s",
+                    shardIdDateCol, rs.getString("SPANNER_TYPE")));
+          }
+          foundShardIdDateCol = true;
+        } else if (col.equalsIgnoreCase(shardIdFloat64Col)) {
+          if (!rs.getString("SPANNER_TYPE").equals("FLOAT64")) {
+            throw SpannerExceptionFactory.newSpannerException(
+                ErrorCode.INVALID_ARGUMENT,
+                String.format(
+                    "Float64 shard column %s is not of type FLOAT64, but of type %s",
+                    shardIdFloat64Col, rs.getString("SPANNER_TYPE")));
+          }
+          foundShardIdFloat64Col = true;
+        } else if (col.equalsIgnoreCase(shardIdInt64Col)) {
+          if (!rs.getString("SPANNER_TYPE").equals("INT64")) {
+            throw SpannerExceptionFactory.newSpannerException(
+                ErrorCode.INVALID_ARGUMENT,
+                String.format(
+                    "Int64 shard column %s is not of type INT64, but of type %s",
+                    shardIdInt64Col, rs.getString("SPANNER_TYPE")));
+          }
+          foundShardIdInt64Col = true;
+        } else if (col.equalsIgnoreCase(shardIdStringCol)) {
+          if (!rs.getString("SPANNER_TYPE").startsWith("STRING")) {
+            throw SpannerExceptionFactory.newSpannerException(
+                ErrorCode.INVALID_ARGUMENT,
+                String.format(
+                    "String shard column %s is not of type STRING, but of type %s",
+                    shardIdStringCol, rs.getString("SPANNER_TYPE")));
+          }
+          foundShardIdStringCol = true;
+        } else if (col.equalsIgnoreCase(shardIdTimestampCol)) {
+          if (!rs.getString("SPANNER_TYPE").equals("TIMESTAMP")) {
+            throw SpannerExceptionFactory.newSpannerException(
+                ErrorCode.INVALID_ARGUMENT,
+                String.format(
+                    "Timestamp shard column %s is not of type TIMESTAMP, but of type %s",
+                    shardIdTimestampCol, rs.getString("SPANNER_TYPE")));
+          }
+          foundShardIdTimestampCol = true;
         } else if (col.equalsIgnoreCase(tsCol)) {
           if (!rs.getString("SPANNER_TYPE").equals("TIMESTAMP")) {
             throw SpannerExceptionFactory.newSpannerException(
@@ -413,6 +577,36 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
       throw SpannerExceptionFactory.newSpannerException(
           ErrorCode.NOT_FOUND, String.format("Table name column %s not found", tableCol));
     }
+    if (!foundShardIdBoolCol) {
+      throw SpannerExceptionFactory.newSpannerException(
+          ErrorCode.NOT_FOUND, String.format("Bool shard column %s not found", shardIdBoolCol));
+    }
+    if (!foundShardIdBytesCol) {
+      throw SpannerExceptionFactory.newSpannerException(
+          ErrorCode.NOT_FOUND, String.format("Bytes shard column %s not found", shardIdBytesCol));
+    }
+    if (!foundShardIdDateCol) {
+      throw SpannerExceptionFactory.newSpannerException(
+          ErrorCode.NOT_FOUND, String.format("Date shard column %s not found", shardIdDateCol));
+    }
+    if (!foundShardIdFloat64Col) {
+      throw SpannerExceptionFactory.newSpannerException(
+          ErrorCode.NOT_FOUND,
+          String.format("Float64 shard column %s not found", shardIdFloat64Col));
+    }
+    if (!foundShardIdInt64Col) {
+      throw SpannerExceptionFactory.newSpannerException(
+          ErrorCode.NOT_FOUND, String.format("Int64 shard column %s not found", shardIdInt64Col));
+    }
+    if (!foundShardIdStringCol) {
+      throw SpannerExceptionFactory.newSpannerException(
+          ErrorCode.NOT_FOUND, String.format("String shard column %s not found", shardIdStringCol));
+    }
+    if (!foundShardIdTimestampCol) {
+      throw SpannerExceptionFactory.newSpannerException(
+          ErrorCode.NOT_FOUND,
+          String.format("Timestamp shard column %s not found", shardIdTimestampCol));
+    }
     if (!foundTsCol) {
       throw SpannerExceptionFactory.newSpannerException(
           ErrorCode.NOT_FOUND, String.format("Commit timestamp column %s not found", tsCol));
@@ -428,7 +622,20 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
             .bind("table")
             .to(commitTimestampsTable)
             .build();
-    String[] expectedCols = new String[] {databaseCol, catalogCol, schemaCol, tableCol};
+    String[] expectedCols =
+        new String[] {
+          databaseCol,
+          catalogCol,
+          schemaCol,
+          tableCol,
+          shardIdBoolCol,
+          shardIdBytesCol,
+          shardIdDateCol,
+          shardIdFloat64Col,
+          shardIdInt64Col,
+          shardIdStringCol,
+          shardIdTimestampCol
+        };
     int index = 0;
     try (ResultSet rs = client.singleUse().executeQuery(pkStatement)) {
       while (rs.next()) {
@@ -449,18 +656,39 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
         throw SpannerExceptionFactory.newSpannerException(
             ErrorCode.NOT_FOUND,
             String.format(
-                "Table %s does has a primary key with too few columns. The primary key of the table must be (`%s`, `%s`, `%s`, `%s`).",
-                commitTimestampsTable, databaseCol, catalogCol, schemaCol, tableCol));
+                "Table %s does has a primary key with too few columns. The primary key of the table must be (`%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`, `%s`).",
+                commitTimestampsTable,
+                databaseCol,
+                catalogCol,
+                schemaCol,
+                tableCol,
+                shardIdBoolCol,
+                shardIdBytesCol,
+                shardIdDateCol,
+                shardIdFloat64Col,
+                shardIdInt64Col,
+                shardIdStringCol,
+                shardIdTimestampCol));
       }
     }
   }
 
   @Override
   public Timestamp get(TableId table) {
+    return internalGet(table, null);
+  }
+
+  @Override
+  public Timestamp get(TableId table, Value shardValue) {
+    return internalGet(table, shardValue);
+  }
+
+  private Timestamp internalGet(TableId table, Value shardValue) {
     Preconditions.checkNotNull(table);
     if (!initialized) {
       initialize();
     }
+    Type.Code t = shardValue == null ? null : shardValue.getType().getCode();
     Struct row =
         client
             .singleUse()
@@ -470,7 +698,14 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
                     table.getDatabaseId().getName(),
                     table.getCatalog(),
                     table.getSchema(),
-                    table.getTable()),
+                    table.getTable(),
+                    t == Code.BOOL ? shardValue.getBool() : null,
+                    t == Code.BYTES ? shardValue.getBytes() : null,
+                    t == Code.DATE ? shardValue.getDate() : null,
+                    t == Code.FLOAT64 ? shardValue.getFloat64() : null,
+                    t == Code.INT64 ? shardValue.getInt64() : null,
+                    t == Code.STRING ? shardValue.getString() : null,
+                    t == Code.TIMESTAMP ? shardValue.getTimestamp() : null),
                 tsColumns);
     if (row == null) {
       return initialCommitTimestamp;
@@ -482,9 +717,21 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
   public void set(TableId table, Timestamp commitTimestamp) {
     Preconditions.checkNotNull(table);
     Preconditions.checkNotNull(commitTimestamp);
+    internalSet(table, null, commitTimestamp);
+  }
+
+  @Override
+  public void set(TableId table, Value shardValue, Timestamp commitTimestamp) {
+    internalSet(table, shardValue, commitTimestamp);
+  }
+
+  private void internalSet(TableId table, Value shardValue, Timestamp commitTimestamp) {
+    Preconditions.checkNotNull(table);
+    Preconditions.checkNotNull(commitTimestamp);
     if (!initialized) {
       initialize();
     }
+    Type.Code t = shardValue == null ? null : shardValue.getType().getCode();
     client.writeAtLeastOnce(
         Collections.singleton(
             Mutation.newInsertOrUpdateBuilder(commitTimestampsTable)
@@ -496,6 +743,20 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
                 .to(table.getSchema())
                 .set(tableCol)
                 .to(table.getTable())
+                .set(shardIdBoolCol)
+                .to(t == Code.BOOL ? shardValue.getBool() : null)
+                .set(shardIdBytesCol)
+                .to(t == Code.BYTES ? shardValue.getBytes() : null)
+                .set(shardIdDateCol)
+                .to(t == Code.DATE ? shardValue.getDate() : null)
+                .set(shardIdFloat64Col)
+                .to(t == Code.FLOAT64 ? shardValue.getFloat64() : null)
+                .set(shardIdInt64Col)
+                .to(t == Code.INT64 ? shardValue.getInt64() : null)
+                .set(shardIdStringCol)
+                .to(t == Code.STRING ? shardValue.getString() : null)
+                .set(shardIdTimestampCol)
+                .to(t == Code.TIMESTAMP ? shardValue.getTimestamp() : null)
                 .set(tsCol)
                 .to(commitTimestamp)
                 .build()));

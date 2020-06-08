@@ -85,6 +85,20 @@ public class SpannerDatabaseTailer extends AbstractApiService
     public Builder setCommitTimestampRepository(CommitTimestampRepository repository);
 
     /**
+     * Sets the {@link ShardProvider} that this {@link SpannerDatabaseTailer} should use for all
+     * tables that do not have a specific {@link ShardProvider} set through {@link
+     * #setShardProviders(Map)}.
+     */
+    public Builder setShardProvider(ShardProvider shardProvider);
+
+    /**
+     * Sets the {@link ShardProvider}s to use for specific tables. Any {@link ShardProvider} that is
+     * supplied through this method will override any global {@link ShardProvider} that has been set
+     * using {@link #setShardProvider(ShardProvider)}.
+     */
+    public Builder setShardProviders(Map<TableId, ShardProvider> shardProviders);
+
+    /**
      * Sets the poll interval to use for this {@link SpannerDatabaseTailer}. The default is 1
      * second.
      */
@@ -146,6 +160,8 @@ public class SpannerDatabaseTailer extends AbstractApiService
     private final DatabaseId databaseId;
     private String catalog = "";
     private String schema = "";
+    private ShardProvider shardProvider;
+    private Map<TableId, ShardProvider> shardProviders;
     private boolean allTables = false;
     private List<String> includedTables = new ArrayList<>();
     private List<String> excludedTables = new ArrayList<>();
@@ -199,6 +215,18 @@ public class SpannerDatabaseTailer extends AbstractApiService
       return this;
     }
 
+    @Override
+    public Builder setShardProvider(ShardProvider shardProvider) {
+      this.shardProvider = shardProvider;
+      return this;
+    }
+
+    @Override
+    public Builder setShardProviders(Map<TableId, ShardProvider> shardProviders) {
+      this.shardProviders = shardProviders;
+      return this;
+    }
+
     /**
      * Sets the poll interval to use for this {@link SpannerDatabaseTailer}. The default is 1
      * second.
@@ -239,6 +267,8 @@ public class SpannerDatabaseTailer extends AbstractApiService
   private final DatabaseId databaseId;
   private final String catalog;
   private final String schema;
+  private final ShardProvider shardProvider;
+  private final Map<TableId, ShardProvider> shardProviders;
   private final boolean allTables;
   private final ImmutableList<String> includedTables;
   private final ImmutableList<String> excludedTables;
@@ -255,6 +285,8 @@ public class SpannerDatabaseTailer extends AbstractApiService
     this.databaseId = builder.databaseId;
     this.catalog = builder.catalog;
     this.schema = builder.schema;
+    this.shardProvider = builder.shardProvider;
+    this.shardProviders = builder.shardProviders;
     this.allTables = builder.allTables;
     this.includedTables = ImmutableList.copyOf(builder.includedTables);
     this.excludedTables = ImmutableList.copyOf(builder.excludedTables);
@@ -384,9 +416,17 @@ public class SpannerDatabaseTailer extends AbstractApiService
   private void initWatchersLocked() {
     watchers = new HashMap<>(tables.size());
     for (TableId table : tables) {
+      ShardProvider tableShardProvider = null;
+      if (this.shardProviders != null) {
+        tableShardProvider = this.shardProviders.get(table);
+      }
+      if (tableShardProvider == null) {
+        tableShardProvider = this.shardProvider;
+      }
       SpannerTableTailer watcher =
           SpannerTableTailer.newBuilder(spanner, table)
               .setCommitTimestampRepository(commitTimestampRepository)
+              .setShardProvider(tableShardProvider)
               .setPollInterval(pollInterval)
               .setExecutor(executor)
               .build();
