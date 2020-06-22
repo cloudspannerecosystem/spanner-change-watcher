@@ -23,7 +23,7 @@
     <junit.version>4.13</junit.version>
     <truth.version>1.0.1</truth.version>
     <mockito.version>3.3.3</mockito.version>
-    <spanner.test.version>1.53.0</spanner.test.version>
+    <spanner.test.version>1.56.0</spanner.test.version>
   </properties>
   
   <dependencyManagement>
@@ -52,11 +52,20 @@
       
       <dependency>
         <groupId>com.google.cloud</groupId>
+        <artifactId>google-cloud-spanner-bom</artifactId>
+        <type>pom</type>
+        <scope>import</scope>
+        <version>1.56.0</version>
+      </dependency>
+      
+      <dependency>
+        <groupId>com.google.cloud</groupId>
         <artifactId>libraries-bom</artifactId>
-        <version>5.3.0</version>
+        <version>7.0.0</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
+      <!-- TODO: Remove this once the test-jar is included in the bom -->
       <dependency>
         <groupId>com.google.cloud</groupId>
         <artifactId>google-cloud-spanner</artifactId>
