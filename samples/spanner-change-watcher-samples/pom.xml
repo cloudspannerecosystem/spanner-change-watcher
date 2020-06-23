@@ -5,10 +5,14 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.google.cloud.samples</groupId>
   <artifactId>spanner-change-watcher-samples</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
   <packaging>jar</packaging>
   <name>Google Cloud Spanner Change Watcher Samples</name>
   <description>Google Cloud Spanner Data Change Watcher Samples</description>
+  <parent>
+    <groupId>com.google.cloud</groupId>
+    <artifactId>spanner-change-watcher</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+  </parent>
   
   <properties>
     <maven.compiler.target>1.8</maven.compiler.target>
@@ -20,7 +24,6 @@
     <dependency>
       <groupId>com.google.cloud</groupId>
       <artifactId>google-cloud-spanner-change-watcher</artifactId>
-      <version>0.0.1-SNAPSHOT</version>
       <exclusions>
         <exclusion>
           <groupId>io.grpc</groupId>
@@ -31,7 +34,32 @@
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-api</artifactId>
-      <version>1.29.0</version>
+    </dependency>
+    
+    <!-- Test dependency for integration test environment -->
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-spanner-change-watcher</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    
+    <!-- Generic test dependencies -->
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.truth</groupId>
+      <artifactId>truth</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <build>
