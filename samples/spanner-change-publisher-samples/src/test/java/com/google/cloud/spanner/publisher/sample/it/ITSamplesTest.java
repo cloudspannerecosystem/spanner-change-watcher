@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.cloud.spanner.publisher.it;
+package com.google.cloud.spanner.publisher.sample.it;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -30,13 +30,14 @@ import com.google.cloud.spanner.KeySet;
 import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.Value;
-import com.google.cloud.spanner.publisher.Samples;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher;
 import com.google.cloud.spanner.publisher.SpannerToAvroFactory;
 import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro;
 import com.google.cloud.spanner.publisher.SpannerToJsonFactory;
 import com.google.cloud.spanner.publisher.SpannerToJsonFactory.SpannerToJson;
+import com.google.cloud.spanner.publisher.it.PubsubTestHelper;
 import com.google.cloud.spanner.publisher.it.PubsubTestHelper.ITPubsubEnv;
+import com.google.cloud.spanner.publisher.sample.Samples;
 import com.google.cloud.spanner.watcher.TableId;
 import com.google.cloud.spanner.watcher.it.SpannerTestHelper;
 import com.google.common.collect.ImmutableList;
