@@ -37,7 +37,7 @@ public interface SpannerTableChangeWatcher extends ApiService {
   interface RowChangeCallback {
     /**
      * Called once for each detected insert or update of a row. Calls are guaranteed to be in order
-     * of detected changes.
+     * of commit timestamp of the changes.
      *
      * @param table The table where the data was inserted or updated.
      * @param row The updated data of the row that was inserted or updated.
@@ -54,9 +54,9 @@ public interface SpannerTableChangeWatcher extends ApiService {
    * heavy computations or blocking operations to a non-blocking executor or buffer.
    *
    * <p>The {@link SpannerTableChangeWatcher} guarantees that at most one {@link RowChangeCallback}
-   * will be active at any given time, and all callbacks will receive all changes in order. There is
-   * no guarantee in the order which callback is called first if a {@link SpannerTableChangeWatcher}
-   * has registered multiple callbacks.
+   * will be active at any given time, and all callbacks will receive all changes in order of commit
+   * timestamp. There is no guarantee as to the order of which callback is called first if a {@link
+   * SpannerTableChangeWatcher} has registered multiple callbacks.
    */
   void addCallback(RowChangeCallback callback);
 }

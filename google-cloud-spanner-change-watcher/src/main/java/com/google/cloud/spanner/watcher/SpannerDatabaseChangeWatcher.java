@@ -37,7 +37,9 @@ public interface SpannerDatabaseChangeWatcher extends ApiService {
   /**
    * Adds a {@link RowChangeCallback} for this {@link SpannerDatabaseChangeWatcher}. Callbacks may
    * only be added when the {@link #state()} of this {@link SpannerDatabaseChangeWatcher} is {@link
-   * State#NEW}
+   * State#NEW}. Callbacks for one table will always be in order of commit timestamp, and only one
+   * callback will be active at any time for a table. Callbacks for different tables may be called
+   * in parallel, and there is no guarantee to the ordering of callbacks over multiple tables.
    */
   void addCallback(RowChangeCallback callback);
 }

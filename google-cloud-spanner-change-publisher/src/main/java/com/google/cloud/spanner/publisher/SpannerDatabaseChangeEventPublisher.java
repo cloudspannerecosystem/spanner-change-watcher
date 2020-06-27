@@ -59,6 +59,11 @@ import java.util.logging.Logger;
  * then sent to Pubsub by this event publisher. The publisher can be configured to publish change
  * events from each table to a separate topic, or to publish all changes to a single topic. Each
  * change event contains the {@link TableId}, the new row data and the commit timestamp.
+ *
+ * <p>Changes to one table are guaranteed to be published in order of commit timestamp, but Pubsub
+ * does not guarantee that messages will be delivered in the same order as they were published. See
+ * https://cloud.google.com/pubsub/docs/ordering for more information. There is also no guarantee in
+ * the order which changes to different tables are published to Pubsub.
  */
 public class SpannerDatabaseChangeEventPublisher extends AbstractApiService implements ApiService {
   private static final Logger logger =
