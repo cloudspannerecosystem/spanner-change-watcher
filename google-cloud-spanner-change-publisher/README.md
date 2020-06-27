@@ -128,6 +128,9 @@ scep.pubsub.topicNameFormat=spanner-update-%database%-%table%
 # Specific credentials to use for Pubsub
 scep.pubsub.credentials=/path/to/credentials.json
 
+# Converter factory to convert from Spanner to Pubsub.
+scep.pubsub.converterFactory=com.google.cloud.spanner.publisher.SpannerToJsonFactory
+
 ```
 
 The `spanner-publisher.jar` contains a complete example of all possible
