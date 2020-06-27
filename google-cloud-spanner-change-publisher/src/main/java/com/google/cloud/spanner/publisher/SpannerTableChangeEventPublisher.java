@@ -56,7 +56,9 @@ import java.util.logging.Logger;
  * Publishes change events from a single Spanner table to a single Google Cloud Pubsub topic.
  *
  * <p>The changes to the table are emitted from a {@link SpannerTableChangeWatcher} and then sent to
- * Google Cloud Pubsub by this event publisher.
+ * Google Cloud Pubsub by this event publisher. Changes are guaranteed to be published in order of
+ * commit timestamp, but Pubsub does not guarantee that messages will be delivered in the same order
+ * as they were published. See https://cloud.google.com/pubsub/docs/ordering for more information.
  */
 public class SpannerTableChangeEventPublisher extends AbstractApiService implements ApiService {
   private static final Logger logger =
