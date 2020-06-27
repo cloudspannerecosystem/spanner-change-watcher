@@ -64,8 +64,8 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
         new RowChangeCallback() {
           @Override
           public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
-            latch.countDown();
             receivedRows.incrementAndGet();
+            latch.countDown();
           }
         });
     tailer.startAsync().awaitRunning();
@@ -119,8 +119,8 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
         new RowChangeCallback() {
           @Override
           public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
-            latch.countDown();
             receivedRows.incrementAndGet();
+            latch.countDown();
           }
         });
     SettableApiFuture<Boolean> res = SettableApiFuture.create();
@@ -176,8 +176,8 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
         new RowChangeCallback() {
           @Override
           public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
-            latch.countDown();
             receivedRows.incrementAndGet();
+            latch.countDown();
           }
         });
     tailer.startAsync().awaitRunning();
