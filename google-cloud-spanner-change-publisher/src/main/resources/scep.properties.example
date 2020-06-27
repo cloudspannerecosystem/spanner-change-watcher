@@ -73,6 +73,15 @@ scep.pubsub.project=my-pubsub-project
 
 scep.pubsub.credentials=/path/to/pubsub-credentials.json
 
+# The ConverterFactory to use to convert a Cloud Spanner row to a serializable format that
+# can be published as a Pubsub message. The value for this property should be the fully
+# qualified class name of a class that implements the com.google.cloud.spanner.publisher.ConverterFactory
+# interface. If no converter is configured, com.google.cloud.spanner.publisher.SpannerToAvroFactory
+# will be used. This will publish the changes as Avro records. The below example configures
+# the publisher to publish the changes in JSON format.
+
+scep.pubsub.converterFactory=com.google.cloud.spanner.publisher.SpannerToJsonFactory
+
 
 # Sets the Pubsub Topic(s) where the changes should be published. All changes can be published to
 # both a single topic or different topics for different tables. The topicNameFormat may contain a

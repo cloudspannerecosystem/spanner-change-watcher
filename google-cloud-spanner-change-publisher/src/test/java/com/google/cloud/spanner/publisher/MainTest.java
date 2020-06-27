@@ -27,6 +27,7 @@ import com.google.cloud.spanner.DatabaseId;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.watcher.SpannerDatabaseTailer;
+import com.google.cloud.spanner.watcher.TableId;
 import com.google.common.base.Preconditions;
 import java.io.IOException;
 import java.util.Iterator;
@@ -77,6 +78,25 @@ public class MainTest {
       props.put(prefix(keysAndValues[i]), keysAndValues[i + 1]);
     }
     return props;
+  }
+
+  public static class NoopConverterFactory implements ConverterFactory {
+    @Override
+    public Converter create(DatabaseClient client, TableId table) {
+      return null;
+    }
+  }
+
+  public static class SingletonNoopConverterFactory implements ConverterFactory {
+    public static final SingletonNoopConverterFactory INSTANCE =
+        new SingletonNoopConverterFactory();
+
+    private SingletonNoopConverterFactory() {}
+
+    @Override
+    public Converter create(DatabaseClient client, TableId table) {
+      return null;
+    }
   }
 
   @Test
@@ -133,6 +153,34 @@ public class MainTest {
         createConfiguration(
             createMinimalPropertiesPlus("pubsub.topicNameFormat", "some-topic-name"));
     assertThat(config.getTopicNameFormat()).isEqualTo("some-topic-name");
+
+    config = createConfiguration(createMinimalProperties());
+    assertThat(config.getConverterFactory()).isSameInstanceAs(SpannerToAvroFactory.INSTANCE);
+    config =
+        createConfiguration(
+            createMinimalPropertiesPlus(
+                "pubsub.converterFactory",
+                "com.google.cloud.spanner.publisher.SpannerToJsonFactory"));
+    assertThat(config.getConverterFactory()).isSameInstanceAs(SpannerToJsonFactory.INSTANCE);
+    config =
+        createConfiguration(
+            createMinimalPropertiesPlus(
+                "pubsub.converterFactory",
+                "com.google.cloud.spanner.publisher.SpannerToJsonFactory"));
+    assertThat(config.getConverterFactory()).isSameInstanceAs(SpannerToJsonFactory.INSTANCE);
+    config =
+        createConfiguration(
+            createMinimalPropertiesPlus(
+                "pubsub.converterFactory",
+                "com.google.cloud.spanner.publisher.MainTest$NoopConverterFactory"));
+    assertThat(config.getConverterFactory()).isInstanceOf(NoopConverterFactory.class);
+    config =
+        createConfiguration(
+            createMinimalPropertiesPlus(
+                "pubsub.converterFactory",
+                "com.google.cloud.spanner.publisher.MainTest$SingletonNoopConverterFactory"));
+    assertThat(config.getConverterFactory())
+        .isSameInstanceAs(SingletonNoopConverterFactory.INSTANCE);
   }
 
   @Test
@@ -171,7 +219,9 @@ public class MainTest {
                 "pubsub.credentials",
                 "src/test/resources/test-credentials.json",
                 "pubsub.topicNameFormat",
-                "my-pubsub-topic"));
+                "my-pubsub-topic",
+                "pubsub.converterFactory",
+                "com.google.cloud.spanner.publisher.SpannerToJsonFactory"));
     Spanner spanner = mock(Spanner.class);
     SpannerDatabaseTailer watcher = (SpannerDatabaseTailer) Main.createWatcher(config, spanner);
     DatabaseId db = DatabaseId.of("my-spanner-project", "my-instance", "my-database");

@@ -136,7 +136,7 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
         },
         MoreExecutors.directExecutor());
     tailer.startAsync().awaitRunning();
-    latch.await(15L, TimeUnit.SECONDS);
+    latch.await(20L, TimeUnit.SECONDS);
     assertThat(receivedRows.get()).isEqualTo(SELECT_FOO_ROW_COUNT + SELECT_BAR_ROW_COUNT);
     // Now simulate that the table has been deleted.
     Level currentLevel = SpannerTableTailer.logger.getLevel();

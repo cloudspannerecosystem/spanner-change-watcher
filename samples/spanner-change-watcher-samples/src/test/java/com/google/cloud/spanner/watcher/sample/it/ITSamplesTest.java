@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.cloud.spanner.watcher.it;
+package com.google.cloud.spanner.watcher.sample.it;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -26,10 +26,11 @@ import com.google.cloud.spanner.KeySet;
 import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.Value;
-import com.google.cloud.spanner.watcher.Samples;
 import com.google.cloud.spanner.watcher.SpannerTableTailer;
 import com.google.cloud.spanner.watcher.TableId;
+import com.google.cloud.spanner.watcher.it.SpannerTestHelper;
 import com.google.cloud.spanner.watcher.it.SpannerTestHelper.ITSpannerEnv;
+import com.google.cloud.spanner.watcher.sample.Samples;
 import com.google.common.collect.ImmutableList;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -54,7 +55,7 @@ import org.junit.runners.JUnit4;
 /** Integration tests for the spanner-change-watcher samples. */
 @RunWith(JUnit4.class)
 public class ITSamplesTest {
-  private static final Logger logger = Logger.getLogger(ITSpannerTableTailerTest.class.getName());
+  private static final Logger logger = Logger.getLogger(ITSamplesTest.class.getName());
   private static final ITSpannerEnv env = new ITSpannerEnv();
   private static DatabaseId databaseId;
   private static Database database;

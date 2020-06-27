@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.cloud.spanner.watcher;
+package com.google.cloud.spanner.watcher.sample;
 
 import com.google.api.core.ApiService;
 import com.google.api.core.ApiService.Listener;
@@ -29,8 +29,17 @@ import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.TransactionContext;
 import com.google.cloud.spanner.TransactionRunner.TransactionCallable;
 import com.google.cloud.spanner.Value;
+import com.google.cloud.spanner.watcher.CommitTimestampRepository;
+import com.google.cloud.spanner.watcher.FixedShardProvider;
+import com.google.cloud.spanner.watcher.SpannerCommitTimestampRepository;
+import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
+import com.google.cloud.spanner.watcher.SpannerDatabaseTailer;
+import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
+import com.google.cloud.spanner.watcher.SpannerTableTailer;
+import com.google.cloud.spanner.watcher.TableId;
+import com.google.cloud.spanner.watcher.TimebasedShardProvider;
 import com.google.cloud.spanner.watcher.TimebasedShardProvider.Interval;
 import com.google.cloud.spanner.watcher.TimebasedShardProvider.TimebasedShardId;
 import com.google.common.collect.ImmutableList;

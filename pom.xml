@@ -112,6 +112,8 @@
     <module>google-cloud-spanner-change-watcher</module>
     <module>google-cloud-spanner-change-publisher</module>
     <module>google-cloud-spanner-change-archiver</module>
+    <module>samples/spanner-change-watcher-samples</module>
+    <module>samples/spanner-change-publisher-samples</module>
   </modules>
   
   <build>

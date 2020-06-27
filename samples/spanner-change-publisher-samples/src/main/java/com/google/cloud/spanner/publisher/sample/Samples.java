@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.cloud.spanner.publisher;
+package com.google.cloud.spanner.publisher.sample;
 
 import com.google.api.core.ApiService;
 import com.google.api.core.ApiService.Listener;
@@ -31,8 +31,12 @@ import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.DatabaseId;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
+import com.google.cloud.spanner.publisher.SpannerDatabaseChangeEventPublisher;
+import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher;
 import com.google.cloud.spanner.publisher.SpannerTableChangeEventPublisher.PublishListener;
+import com.google.cloud.spanner.publisher.SpannerToAvroFactory;
 import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro;
+import com.google.cloud.spanner.publisher.SpannerToJsonFactory;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerDatabaseTailer;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher;

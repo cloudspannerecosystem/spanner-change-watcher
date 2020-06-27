@@ -190,6 +190,7 @@ public class Main {
                     "projects/%s/topics/%s",
                     config.getPubsubProject(), config.getTopicNameFormat()))
             .setCredentials(config.getPubsubCredentials())
+            .setConverterFactory(config.getConverterFactory())
             .build();
     return publisher;
   }

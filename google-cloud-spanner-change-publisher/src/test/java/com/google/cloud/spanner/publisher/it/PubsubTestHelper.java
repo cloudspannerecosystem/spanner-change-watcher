@@ -45,7 +45,7 @@ public final class PubsubTestHelper {
         System.getProperty(
             "pubsub.subscription",
             String.format("scw-test-subscription-%08d", RND.nextInt(100000000)));
-    final TopicAdminClient topicAdminClient;
+    public final TopicAdminClient topicAdminClient;
     final SubscriptionAdminClient subAdminClient;
     private final List<String> subscriptions = new ArrayList<String>();
     private final List<String> topics = new ArrayList<>();

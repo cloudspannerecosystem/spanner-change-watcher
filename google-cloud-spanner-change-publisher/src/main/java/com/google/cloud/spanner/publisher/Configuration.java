@@ -25,6 +25,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.Properties;
 import org.threeten.bp.Duration;
@@ -49,6 +51,7 @@ class Configuration {
   private Credentials pubsubCredentials;
   private String topicNameFormat;
   private boolean createTopics;
+  private String converterFactory;
 
   Long getMaxWaitForShutdownSeconds() {
     return maxWaitForShutdownSeconds;
@@ -93,6 +96,49 @@ class Configuration {
 
   boolean createTopics() {
     return createTopics;
+  }
+
+  @SuppressWarnings("unchecked")
+  ConverterFactory getConverterFactory() {
+    if (Strings.isNullOrEmpty(converterFactory)) {
+      return SpannerToAvroFactory.INSTANCE;
+    }
+    Class<? extends ConverterFactory> clazz;
+    try {
+      clazz =
+          converterFactory == null
+              ? SpannerToAvroFactory.class
+              : (Class<? extends ConverterFactory>) Class.forName(converterFactory);
+    } catch (ClassNotFoundException | ClassCastException e) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Converter factory %s cannot be found. Make sure it the full name of an existing class that implements the interface %s",
+              converterFactory, ConverterFactory.class.getName()),
+          e);
+    }
+    // Check if the class has a static INSTANCE field.
+    try {
+      Field instanceField = clazz.getDeclaredField("INSTANCE");
+      if (Modifier.isPublic(instanceField.getModifiers())
+          && Modifier.isStatic(instanceField.getModifiers())
+          && ConverterFactory.class.isAssignableFrom(instanceField.getType())) {
+        return (ConverterFactory) instanceField.get(null);
+      }
+    } catch (NoSuchFieldException
+        | SecurityException
+        | IllegalArgumentException
+        | IllegalAccessException e) {
+      // Ignore and try to create an instance.
+    }
+    try {
+      return clazz.newInstance();
+    } catch (IllegalAccessException | InstantiationException e) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Could not create an instance of %s. Make sure the class has a public no-argument constructor, or a public static INSTANCE field.",
+              converterFactory),
+          e);
+    }
   }
 
   String getPubsubProject() {
@@ -209,6 +255,7 @@ class Configuration {
         Boolean.valueOf(
             MoreObjects.firstNonNull(
                 getSystemOrDefaultProperty("pubsub.createTopics", defaults), "false"));
+    config.converterFactory = getSystemOrDefaultProperty("pubsub.converterFactory", defaults);
 
     return config;
   }
