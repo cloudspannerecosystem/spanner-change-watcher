@@ -20,9 +20,9 @@ jobs:
           git clone git@github.com:googleapis/java-spanner.git ~/java-spanner
           echo Switching to java-spanner workspace
           cd ~/java-spanner
-          echo Checking out async-api
-          git checkout async-api
-          echo Installing async-api version of java-spanner
+          echo Checking out master
+          git checkout master
+          echo Installing snapshot version of java-spanner
           mvn -DskipTests clean install
     - run:
         name: Install Dependencies
