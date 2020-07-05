@@ -23,7 +23,6 @@
     <junit.version>4.13</junit.version>
     <truth.version>1.0.1</truth.version>
     <mockito.version>3.3.3</mockito.version>
-    <spanner.test.version>1.56.0</spanner.test.version>
   </properties>
   
   <dependencyManagement>
@@ -55,29 +54,15 @@
         <artifactId>google-cloud-spanner-bom</artifactId>
         <type>pom</type>
         <scope>import</scope>
-        <version>1.56.0</version>
+        <version>1.57.0</version>
       </dependency>
       
       <dependency>
         <groupId>com.google.cloud</groupId>
         <artifactId>libraries-bom</artifactId>
-        <version>7.0.0</version>
+        <version>8.0.0</version>
         <type>pom</type>
         <scope>import</scope>
-      </dependency>
-      <!-- TODO: Remove this once the test-jar is included in the bom -->
-      <dependency>
-        <groupId>com.google.cloud</groupId>
-        <artifactId>google-cloud-spanner</artifactId>
-        <version>${spanner.test.version}</version>
-        <type>test-jar</type>
-        <scope>test</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>org.conscrypt</groupId>
-            <artifactId>conscrypt-openjdk-uber</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       
       <dependency>
