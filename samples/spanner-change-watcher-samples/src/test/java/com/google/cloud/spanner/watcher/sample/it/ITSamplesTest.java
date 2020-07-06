@@ -147,7 +147,9 @@ public class ITSamplesTest {
         });
   }
 
-  static final String[] NUMBER_NAMES = new String[] {"ONE", "TWO", "THREE", "FOUR", "FIVE"};
+  static final String[] NUMBER_NAMES = new String[] {"ONE", "TWO", "THREE"};
+  static final String[] MULTIPLE_COMMIT_TS_NAMES =
+      new String[] {"ONE", "TWO", "THREE", "FOUR", "FIVE"};
 
   Iterable<Mutation> insertOrUpdateNumbers(String table, int begin, int end, Timestamp ts) {
     ImmutableList.Builder<Mutation> builder =
@@ -185,14 +187,14 @@ public class ITSamplesTest {
 
   Iterable<Struct> multipleCommitTSRowsLastModified(Timestamp commitTs, int begin, int end) {
     ImmutableList.Builder<Struct> builder =
-        ImmutableList.builderWithExpectedSize(NUMBER_NAMES.length);
+        ImmutableList.builderWithExpectedSize(MULTIPLE_COMMIT_TS_NAMES.length);
     for (int i = begin; i < end; i++) {
       builder.add(
           Struct.newBuilder()
               .set("ID")
               .to(Long.valueOf(i + 1))
               .set("NAME")
-              .to(NUMBER_NAMES[i])
+              .to(MULTIPLE_COMMIT_TS_NAMES[i])
               .set("LAST_MODIFIED")
               .to(commitTs)
               .set("LAST_BATCH")
@@ -204,14 +206,14 @@ public class ITSamplesTest {
 
   Iterable<Struct> multipleCommitTSRowsLastBatch(Timestamp commitTs, int begin, int end) {
     ImmutableList.Builder<Struct> builder =
-        ImmutableList.builderWithExpectedSize(NUMBER_NAMES.length);
+        ImmutableList.builderWithExpectedSize(MULTIPLE_COMMIT_TS_NAMES.length);
     for (int i = begin; i < end; i++) {
       builder.add(
           Struct.newBuilder()
               .set("ID")
               .to(Long.valueOf(i + 1))
               .set("NAME")
-              .to(NUMBER_NAMES[i])
+              .to(MULTIPLE_COMMIT_TS_NAMES[i])
               .set("LAST_MODIFIED")
               .to(Timestamp.MIN_VALUE)
               .set("LAST_BATCH_JOB")
