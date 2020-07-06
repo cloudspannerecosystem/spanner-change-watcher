@@ -18,6 +18,7 @@ package com.google.cloud.spanner.watcher;
 
 import com.google.api.core.AbstractApiService;
 import com.google.api.core.ApiFuture;
+import com.google.api.core.ApiFutures;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.AsyncResultSet;
 import com.google.cloud.spanner.AsyncResultSet.CallbackResponse;
@@ -80,6 +81,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
     private CommitTimestampRepository commitTimestampRepository;
     private Duration pollInterval = Duration.ofSeconds(1L);
     private ScheduledExecutorService executor;
+    private String commitTimestampColumn;
 
     private Builder(Spanner spanner, TableId table) {
       this.spanner = Preconditions.checkNotNull(spanner);
@@ -119,6 +121,20 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
      */
     public Builder setExecutor(ScheduledExecutorService executor) {
       this.executor = Preconditions.checkNotNull(executor);
+      return this;
+    }
+
+    /**
+     * <strong>This should only be set if your table contains more than one commit timestamp
+     * column.</strong>
+     *
+     * <p>Sets the commit timestamp column to use. It is only necessary to set this property if the
+     * table contains more than one column with the allow_commit_timestamp=true option. If the table
+     * only contains one column that can hold a commit timestamp, the {@link SpannerTableTailer}
+     * will find the column automatically.
+     */
+    public Builder setCommitTimestampColumn(String column) {
+      this.commitTimestampColumn = column;
       return this;
     }
 
@@ -164,6 +180,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                     .build())
             : builder.executor;
     this.isOwnedExecutor = builder.executor == null;
+    if (builder.commitTimestampColumn != null) {
+      this.commitTimestampColumn = builder.commitTimestampColumn;
+    }
   }
 
   @Override
@@ -180,7 +199,13 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   @Override
   protected void doStart() {
     logger.log(Level.INFO, "Starting watcher for table {0}", table);
-    ApiFuture<String> commitTimestampColFut = SpannerUtils.getTimestampColumn(client, table);
+    ApiFuture<String> commitTimestampColFut;
+    if (commitTimestampColumn == null) {
+      // Fetch the commit timestamp column from the database metadata.
+      commitTimestampColFut = SpannerUtils.getTimestampColumn(client, table);
+    } else {
+      commitTimestampColFut = ApiFutures.immediateFuture(commitTimestampColumn);
+    }
     commitTimestampColFut.addListener(
         new Runnable() {
           @Override

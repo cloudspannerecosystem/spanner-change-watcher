@@ -556,4 +556,54 @@ public class Samples {
     // Stop the poller and wait for it to release all resources.
     watcher.stopAsync().awaitTerminated();
   }
+
+  /**
+   * Watch a database that contains one or more tables with multiple columns that have the option
+   * allow_commit_timestamp=true. If a table for example contains a column that contains the commit
+   * timestamp of the most recent update as well as an additional column that contains the commit
+   * timestamp of a background job that runs every night, the watcher needs to be told which of the
+   * commit timestamp columns to watch.
+   *
+   * <p>Example table:
+   *
+   * <pre>{@code
+   * CREATE TABLE MY_TABLE (
+   *   ID             INT64,
+   *   NAME           STRING(MAX),
+   *   LAST_MODIFIED  TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+   *   LAST_BATCH_JOB TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+   * ) PRIMARY KEY (ID);
+   * }</pre>
+   */
+  public static void watchTableWithMultipleCommitTimestampColumns(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database // "my-database"
+      ) throws InterruptedException {
+
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    DatabaseId databaseId = DatabaseId.of(project, instance, database);
+    final CountDownLatch latch = new CountDownLatch(3);
+    SpannerDatabaseChangeWatcher watcher =
+        SpannerDatabaseTailer.newBuilder(spanner, databaseId)
+            .allTables()
+            // Use the commit timestamp column `LAST_MODIFIED` for all tables.
+            .setCommitTimestampColumnFunction((tableId) -> "LAST_MODIFIED")
+            .build();
+    watcher.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            System.out.printf(
+                "Received change for table %s: %s%n", table, row.asStruct().toString());
+            latch.countDown();
+          }
+        });
+    watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
+    // Wait until we have received 3 changes.
+    latch.await();
+    // Stop the poller and wait for it to release all resources.
+    watcher.stopAsync().awaitTerminated();
+  }
 }
