@@ -28,9 +28,14 @@ import com.google.cloud.spanner.ErrorCode;
 import com.google.cloud.spanner.MockSpannerServiceImpl.StatementResult;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerException;
+import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.spanner.v1.ResultSetMetadata;
+import com.google.spanner.v1.StructType.Field;
+import com.google.spanner.v1.Type;
+import com.google.spanner.v1.TypeCode;
 import io.grpc.Status;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -243,5 +248,74 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
       SpannerException se = (SpannerException) e.getCause();
       assertThat(se.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
     }
+  }
+
+  @Test
+  public void testCustomCommitTimestampColumn() throws Exception {
+    Timestamp ts = Timestamp.now();
+    ResultSetMetadata metadata =
+        RandomResultSetGenerator.METADATA
+            .toBuilder()
+            .setRowType(
+                RandomResultSetGenerator.METADATA
+                    .getRowType()
+                    .toBuilder()
+                    .setFields(
+                        RandomResultSetGenerator.METADATA.getRowType().getFieldsCount() - 1,
+                        Field.newBuilder()
+                            .setName("AlternativeCommitTS")
+                            .setType(Type.newBuilder().setCode(TypeCode.TIMESTAMP).build())
+                            .build())
+                    .build())
+            .build();
+    Statement statement =
+        Statement.newBuilder(
+                "SELECT *\n"
+                    + "FROM `Foo`\n"
+                    + "WHERE `AlternativeCommitTS`>@prevCommitTimestamp\n"
+                    + "ORDER BY `AlternativeCommitTS`")
+            .bind("prevCommitTimestamp")
+            .to(Timestamp.MIN_VALUE)
+            .build();
+    mockSpanner.putStatementResult(
+        StatementResult.query(
+            statement,
+            new RandomResultSetGenerator(1)
+                .generateWithFixedCommitTimestamp(ts)
+                .toBuilder()
+                .setMetadata(metadata)
+                .build()));
+    mockSpanner.putStatementResult(
+        StatementResult.query(
+            statement.toBuilder().bind("prevCommitTimestamp").to(ts).build(),
+            new RandomResultSetGenerator(0).generate().toBuilder().setMetadata(metadata).build()));
+
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    SpannerDatabaseTailer tailer =
+        SpannerDatabaseTailer.newBuilder(spanner, db)
+            .allTables()
+            .setPollInterval(Duration.ofMillis(10L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, db)
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .setCommitTimestampColumnFunction(
+                (tableId) -> tableId.getTable().equals("Foo") ? "AlternativeCommitTS" : null)
+            .build();
+    final AtomicInteger receivedRows = new AtomicInteger();
+    final CountDownLatch latch = new CountDownLatch(1 + SELECT_BAR_ROW_COUNT);
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            receivedRows.incrementAndGet();
+            latch.countDown();
+          }
+        });
+    tailer.startAsync().awaitRunning();
+    latch.await(5L, TimeUnit.SECONDS);
+    tailer.stopAsync().awaitTerminated();
+    assertThat(receivedRows.get()).isEqualTo(1 + SELECT_BAR_ROW_COUNT);
   }
 }

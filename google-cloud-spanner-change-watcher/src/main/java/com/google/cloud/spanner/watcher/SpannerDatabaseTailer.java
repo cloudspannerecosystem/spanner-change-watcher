@@ -113,6 +113,25 @@ public class SpannerDatabaseTailer extends AbstractApiService
      */
     public Builder setExecutor(ScheduledExecutorService executor);
 
+    /**
+     * <strong>This should only be set if your tables contain more than one commit timestamp
+     * column.</strong>
+     *
+     * <p>Sets a function that returns the commit timestamp column to use for a specific table. This
+     * is only needed in case your tables contain more than one commit timestamp column. {@link
+     * SpannerDatabaseTailer} can automatically find the commit timestamp column for tables that
+     * only contain one column with allow_commit_timestamp=true.
+     *
+     * @param commitTimestampFunction The function to use to determine which commit timestamp column
+     *     should be used for a specific table. If no function has been specified, or if the
+     *     function returns <code>null</code> for a given {@link TableId}, the {@link
+     *     SpannerDatabaseTailer} will automatically use the first column of the table that has the
+     *     option allow_commit_timestamp=true.
+     * @return The Builder.
+     */
+    public Builder setCommitTimestampColumnFunction(
+        java.util.function.Function<TableId, String> commitTimestampFunction);
+
     /** Creates a {@link SpannerDatabaseTailer} from this builder. */
     public SpannerDatabaseTailer build();
   }
@@ -168,6 +187,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
     private CommitTimestampRepository commitTimestampRepository;
     private Duration pollInterval = Duration.ofSeconds(1L);
     private ScheduledExecutorService executor;
+    private java.util.function.Function<TableId, String> commitTimestampColumnFunction;
 
     private BuilderImpl(Spanner spanner, DatabaseId databaseId) {
       this.spanner = Preconditions.checkNotNull(spanner);
@@ -250,6 +270,12 @@ public class SpannerDatabaseTailer extends AbstractApiService
       return this;
     }
 
+    public Builder setCommitTimestampColumnFunction(
+        java.util.function.Function<TableId, String> commitTimestampColumnFunction) {
+      this.commitTimestampColumnFunction = commitTimestampColumnFunction;
+      return this;
+    }
+
     /** Creates a {@link SpannerDatabaseTailer} from this builder. */
     @Override
     public SpannerDatabaseTailer build() {
@@ -276,6 +302,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
   private final Duration pollInterval;
   private final ScheduledExecutorService executor;
   private final boolean isOwnedExecutor;
+  private final java.util.function.Function<TableId, String> commitTimestampColumnFunction;
   private ImmutableList<TableId> tables;
   private Map<TableId, SpannerTableChangeWatcher> watchers;
   private final List<RowChangeCallback> callbacks = new LinkedList<>();
@@ -299,6 +326,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
       isOwnedExecutor = false;
       executor = builder.executor;
     }
+    this.commitTimestampColumnFunction = builder.commitTimestampColumnFunction;
   }
 
   private ImmutableList<TableId> findTableNames(DatabaseClient client) {
@@ -429,6 +457,10 @@ public class SpannerDatabaseTailer extends AbstractApiService
               .setShardProvider(tableShardProvider)
               .setPollInterval(pollInterval)
               .setExecutor(executor)
+              .setCommitTimestampColumn(
+                  commitTimestampColumnFunction == null
+                      ? null
+                      : commitTimestampColumnFunction.apply(table))
               .build();
       for (RowChangeCallback callback : callbacks) {
         watcher.addCallback(callback);

@@ -73,6 +73,7 @@ public class ITSamplesTest {
                 "CREATE TABLE NUMBERS2 (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE TABLE MY_TABLE (ID INT64, NAME STRING(MAX), SHARD_ID STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE INDEX IDX_MY_TABLE_SHARDING ON MY_TABLE (SHARD_ID, LAST_MODIFIED DESC)",
+                "CREATE TABLE MULTIPLE_COMMIT_TS (ID INT64, NAME STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true), LAST_BATCH_JOB TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE TABLE NUMBERS_WITHOUT_COMMIT_TIMESTAMP (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP) PRIMARY KEY (ID)"));
     databaseId = database.getId();
     client = env.getSpanner().getDatabaseClient(databaseId);
@@ -147,6 +148,8 @@ public class ITSamplesTest {
   }
 
   static final String[] NUMBER_NAMES = new String[] {"ONE", "TWO", "THREE"};
+  static final String[] MULTIPLE_COMMIT_TS_NAMES =
+      new String[] {"ONE", "TWO", "THREE", "FOUR", "FIVE"};
 
   Iterable<Mutation> insertOrUpdateNumbers(String table, int begin, int end, Timestamp ts) {
     ImmutableList.Builder<Mutation> builder =
@@ -176,6 +179,44 @@ public class ITSamplesTest {
               .set("NAME")
               .to(NUMBER_NAMES[i])
               .set("LAST_MODIFIED")
+              .to(commitTs)
+              .build());
+    }
+    return builder.build();
+  }
+
+  Iterable<Struct> multipleCommitTSRowsLastModified(Timestamp commitTs, int begin, int end) {
+    ImmutableList.Builder<Struct> builder =
+        ImmutableList.builderWithExpectedSize(MULTIPLE_COMMIT_TS_NAMES.length);
+    for (int i = begin; i < end; i++) {
+      builder.add(
+          Struct.newBuilder()
+              .set("ID")
+              .to(Long.valueOf(i + 1))
+              .set("NAME")
+              .to(MULTIPLE_COMMIT_TS_NAMES[i])
+              .set("LAST_MODIFIED")
+              .to(commitTs)
+              .set("LAST_BATCH")
+              .to(Timestamp.MIN_VALUE)
+              .build());
+    }
+    return builder.build();
+  }
+
+  Iterable<Struct> multipleCommitTSRowsLastBatch(Timestamp commitTs, int begin, int end) {
+    ImmutableList.Builder<Struct> builder =
+        ImmutableList.builderWithExpectedSize(MULTIPLE_COMMIT_TS_NAMES.length);
+    for (int i = begin; i < end; i++) {
+      builder.add(
+          Struct.newBuilder()
+              .set("ID")
+              .to(Long.valueOf(i + 1))
+              .set("NAME")
+              .to(MULTIPLE_COMMIT_TS_NAMES[i])
+              .set("LAST_MODIFIED")
+              .to(Timestamp.MIN_VALUE)
+              .set("LAST_BATCH_JOB")
               .to(commitTs)
               .build());
     }
@@ -546,5 +587,88 @@ public class ITSamplesTest {
     assertThat(res).contains("1, Name 1,");
     assertThat(res).contains("2, Name 2,");
     assertThat(res).contains("3, Name 3,");
+  }
+
+  @Test
+  public void testWatchTableWithMultipleCommitTimestampColumnsExample() throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    Future<String> out =
+        runSample(
+            () -> {
+              Samples.watchTableWithMultipleCommitTimestampColumns(
+                  databaseId.getInstanceId().getProject(),
+                  databaseId.getInstanceId().getInstance(),
+                  databaseId.getDatabase());
+            },
+            latch);
+    latch.await(30L, TimeUnit.SECONDS);
+    // First do a write using the commit timestamp column that should not be picked up.
+    Timestamp ts1 =
+        client.write(
+            ImmutableList.of(
+                Mutation.newInsertOrUpdateBuilder("MULTIPLE_COMMIT_TS")
+                    .set("ID")
+                    .to(1L)
+                    .set("NAME")
+                    .to("ONE")
+                    .set("LAST_MODIFIED")
+                    .to(Timestamp.MIN_VALUE)
+                    .set("LAST_BATCH_JOB")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newInsertOrUpdateBuilder("MULTIPLE_COMMIT_TS")
+                    .set("ID")
+                    .to(2L)
+                    .set("NAME")
+                    .to("TWO")
+                    .set("LAST_MODIFIED")
+                    .to(Timestamp.MIN_VALUE)
+                    .set("LAST_BATCH_JOB")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build()));
+    // Then do a write that does use the LAST_MODIFIED column. This change should be picked up.
+    Timestamp ts2 =
+        client.write(
+            ImmutableList.of(
+                Mutation.newInsertOrUpdateBuilder("MULTIPLE_COMMIT_TS")
+                    .set("ID")
+                    .to(3L)
+                    .set("NAME")
+                    .to("THREE")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newInsertOrUpdateBuilder("MULTIPLE_COMMIT_TS")
+                    .set("ID")
+                    .to(4L)
+                    .set("NAME")
+                    .to("FOUR")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .set("LAST_BATCH_JOB")
+                    .to(Timestamp.MIN_VALUE)
+                    .build(),
+                Mutation.newInsertOrUpdateBuilder("MULTIPLE_COMMIT_TS")
+                    .set("ID")
+                    .to(5L)
+                    .set("NAME")
+                    .to("FIVE")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .set("LAST_BATCH_JOB")
+                    .to(Timestamp.MIN_VALUE)
+                    .build()));
+    String res = out.get(60L, TimeUnit.SECONDS);
+
+    TableId table = TableId.of(databaseId, "MULTIPLE_COMMIT_TS");
+    for (Struct row : multipleCommitTSRowsLastBatch(ts1, 0, 2)) {
+      assertThat(res)
+          .doesNotContain(
+              String.format("Received change for table %s: %s%n", table, row.toString()));
+    }
+    for (Struct row : multipleCommitTSRowsLastModified(ts2, 3, 5)) {
+      assertThat(res)
+          .contains(String.format("Received change for table %s: %s%n", table, row.toString()));
+    }
   }
 }
