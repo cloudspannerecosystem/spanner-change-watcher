@@ -66,12 +66,14 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
 import org.threeten.bp.Duration;
 
+@Category(StressIntegrationTest.class)
 @RunWith(Parameterized.class)
 public class ITSpannerTableTailerStressTest {
   static final String TABLE_NAME = "TEST_TABLE";

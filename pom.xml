@@ -54,7 +54,7 @@
         <artifactId>google-cloud-spanner-bom</artifactId>
         <type>pom</type>
         <scope>import</scope>
-        <version>1.57.0</version>
+        <version>1.58.0</version>
       </dependency>
       
       <dependency>
@@ -158,10 +158,46 @@
         <artifactId>maven-failsafe-plugin</artifactId>
         <configuration>
           <forkedProcessTimeoutInSeconds>3000</forkedProcessTimeoutInSeconds>
+          <forkCount>8</forkCount>
           <argLine>-Xmx1024m</argLine>
         </configuration>
+        <executions>
+          <execution>
+            <id>default</id>
+            <configuration>
+              <excludedGroups>com.google.cloud.spanner.watcher.it.StressIntegrationTest</excludedGroups>
+            </configuration>
+          </execution>
+          <execution>
+            <id>stress-integration-test</id>
+            <goals>
+              <goal>integration-test</goal>
+            </goals>
+            <configuration>
+              <skip>${skipStressTests}</skip>
+              <groups>com.google.cloud.spanner.watcher.it.StressIntegrationTest</groups>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>no-stress-integration-tests</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <properties>
+        <skipStressTests>true</skipStressTests>
+      </properties>
+    </profile>
+    <profile>
+      <id>stress-integration-tests</id>
+      <properties>
+        <skipStressTests>false</skipStressTests>
+      </properties>
+    </profile>
+  </profiles>
   
 </project>

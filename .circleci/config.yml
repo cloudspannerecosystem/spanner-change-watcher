@@ -2,6 +2,10 @@
 version: 2
 jobs:
   build_and_test:
+    parameters:
+      run-stress-tests:
+        type: boolean
+        default: false
     docker:
     - image: circleci/openjdk:8-jdk-node
     steps:
@@ -11,19 +15,6 @@ jobs:
         command: find . -name 'pom.xml' | sort | xargs cat > /tmp/maven_cache_seed
     - restore_cache:
         key: maven-{{ checksum "/tmp/maven_cache_seed" }}
-    - attach_workspace:
-        at: ~/java-spanner
-    - run:
-        name: Clone and install java-spanner repository
-        command: |
-          echo Cloning java-spanner
-          git clone git@github.com:googleapis/java-spanner.git ~/java-spanner
-          echo Switching to java-spanner workspace
-          cd ~/java-spanner
-          echo Checking out Async API
-          git checkout master
-          echo Installing snapshot version of java-spanner
-          mvn -DskipTests clean install
     - run:
         name: Install Dependencies
         command: mvn -DskipTests clean install dependency:resolve-plugins dependency:go-offline --settings 'pom.xml'
@@ -35,9 +26,18 @@ jobs:
         command: |
           echo $GCLOUD_SERVICE_KEY > $HOME/gcloud-service-key.json
           echo 'export GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud-service-key.json' >> $BASH_ENV
-    - run:
-        name: Run Integration Tests
-        command: mvn -B -Penable-integration-tests -DtrimStackTrace=false -fae verify --settings 'pom.xml'
+    - when:
+        condition: << parameters.run-stress-tests >>
+        steps:
+          - run: 
+              name: Run Integration and Stress Tests
+              command: mvn -B -Penable-integration-tests -Pstress-integration-tests -DtrimStackTrace=false -fae verify --settings 'pom.xml'
+    - unless:
+        condition: << parameters.run-stress-tests >>
+        steps:
+            - run:
+                name: Run Integration Tests
+                command: mvn -B -Penable-integration-tests -DtrimStackTrace=false -fae verify --settings 'pom.xml'
     - save_cache:
         paths:
         - ~/.m2
@@ -60,4 +60,5 @@ workflows:
               only:
                   - master
     jobs:
-      - build_and_test
+      - build_and_test:
+          run-stress-tests: true
