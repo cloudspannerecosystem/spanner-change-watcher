@@ -1,5 +1,5 @@
 # Orb 'circleci/maven@0.0.12' resolved to 'circleci/maven@0.0.12'
-version: 2
+version: 2.1
 jobs:
   build_and_test:
     parameters:
@@ -45,7 +45,7 @@ jobs:
     - store_test_results:
         path: target/surefire-reports
 workflows:
-  version: 2
+  version: 2.1
   
   commit:  # Run on every commit.
     jobs:
