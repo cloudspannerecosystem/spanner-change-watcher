@@ -9,14 +9,20 @@ Spanner Change Publisher can be included in an existing application, or it can
 be deployed as a standalone application.
 
 ## Usage in Existing Application
-Include the following dependency to your application to include the Spanner
-Change Publisher.
+Clone, install and include the following dependency to your application to use
+Spanner Change Publisher.
+
+```
+git clone git@github.com:cloudspannerecosystem/spanner-change-watcher.git
+cd spanner-change-watcher
+mvn clean install
+```
 
 ```xml
 <dependency>
   <groupId>com.google.cloud</groupId>
   <artifactId>google-cloud-spanner-change-publisher</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 
@@ -76,6 +82,10 @@ SpannerDatabaseChangeEventPublisher eventPublisher =
 // Start the change publisher. This will automatically also start the change watcher.
 eventPublisher.startAsync().awaitRunning();
 ```
+
+### Further Samples
+Take a look at [Samples.java](../samples/spanner-change-publisher-samples/src/main/java/com/google/cloud/spanner/publisher/sample/Samples.java)
+for additional examples of more advanced use cases.
 
 ## Use as a Standalone Application
 Spanner Change Event Publisher can be run as a standalone application to

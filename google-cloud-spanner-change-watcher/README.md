@@ -8,13 +8,19 @@ application based on data change events.
 
 ## Example Usage
 Spanner Change Watcher can be used to watch both single tables, a set of tables,
-or entire databases. Add the following dependency to your project:
+or entire databases. Clone, install and add the dependency to your project:
+
+```
+git clone git@github.com:cloudspannerecosystem/spanner-change-watcher.git
+cd spanner-change-watcher
+mvn clean install
+```
 
 ```xml
 <dependency>
   <groupId>com.google.cloud</groupId>
   <artifactId>google-cloud-spanner-change-watcher</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 
@@ -62,6 +68,11 @@ watcher.addCallback(
     });
 watcher.startAsync().awaitRunning();
 ```
+
+### Further Samples
+Take a look at [Samples.java](../samples/spanner-change-watcher-samples/src/main/java/com/google/cloud/spanner/watcher/sample/Samples.java)
+for additional examples of more advanced use cases.
+
 
 ## Support Level
 Please feel free to report issues and send pull requests, but note that this
