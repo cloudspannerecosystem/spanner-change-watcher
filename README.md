@@ -1,7 +1,5 @@
 # Google Cloud Spanner Change Watcher and Publisher
 
-*Under construction, please check back later!*
-
 ## Introduction
 Google Cloud Spanner Change Watcher and Publisher is a framework that emits
 events when a row has been changed in a Cloud Spanner database. These row
@@ -38,6 +36,9 @@ watcher.addCallback(
     });
 watcher.startAsync().awaitRunning();
 ```
+
+Take a look at [Samples.java](./samples/spanner-change-watcher-samples/src/main/java/com/google/cloud/spanner/watcher/sample/Samples.java)
+for additional examples of more advanced use cases.
 
 ## Spanner Change Publisher
 Spanner Change Publisher publishes data changes in a Cloud Spanner database to
@@ -77,6 +78,8 @@ SpannerDatabaseChangeEventPublisher eventPublisher =
 eventPublisher.startAsync().awaitRunning();
 ```
 
+Take a look at [Samples.java](./samples/spanner-change-publisher-samples/src/main/java/com/google/cloud/spanner/publisher/sample/Samples.java)
+for additional examples of more advanced use cases.
 
 ## Spanner Change Archiver
 Spanner Change Archiver is an example application using a Spanner Change
