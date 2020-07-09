@@ -7,11 +7,19 @@ change events can be captured and processed in-process as part of a user
 application, or they can be published to Google Cloud Pubsub for consumption by
 any other application.
 
+More information on how to use Spanner Change Watcher and Spanner Change Publisher
+can be found here:
+* [Spanner Change Watcher](https://medium.com/@knutolavloite/cloud-spanner-change-watcher-b77ca036459c) 
+* [Spanner Change Publisher](https://medium.com/@knutolavloite/cloud-spanner-change-publisher-7fbee48f66f8)
+
 ## Spanner Change Watcher
 Spanner Change Watcher is the core framework that watches Spanner databases and
 tables for data changes and emits events when changes are detected. This
 framework can be included in existing applications and used to trigger
 functionality or processes in that application based on data change events.
+
+Spanner Change Watcher uses [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to determine when a change has occurred.
+The framework cannot be used for tables that do not include a commit timestamp.
 
 See [Spanner Change Watcher README file](./google-cloud-spanner-change-watcher/README.md)
 for more information.
@@ -90,6 +98,17 @@ for the database in files stored in Google Cloud Storage.
 
 See [Spanner Change Archiver README file](./google-cloud-spanner-change-archiver/README.md)
 for more information.
+
+## Limitations
+* Spanner Change Watcher and Spanner Change Publisher use [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to determine when a
+  change has occurred. They cannot be used on tables that do not include a commit timestamp.
+* Deletes are not detected, unless these are soft deletes that only update a deleted flag in the corresponding table.
+* Spanner Change Watcher polls tables for changes. Polling on larger tables can take some time and cause some delay
+  before a change is detected. The default poll interval is 1 second and is configurable.
+* Spanner Change Watcher emits changes on a row level basis, including the commit timestamp of the change. It does not
+  emit an even containing all changes of a single transaction. If that is needed, the client application will need to
+  group the row level changes together based on the commit timestamp.
+* Spanner Change Watcher is not a managed solution and does not come with Cloud Spanner's SLO. 
 
 ## Support Level
 Please feel free to report issues and send pull requests, but note that this
