@@ -8,6 +8,8 @@ tables in a database.
 Spanner Change Publisher can be included in an existing application, or it can
 be deployed as a standalone application.
 
+A further introduction to Spanner Change Publisher [can be found here](https://medium.com/@knutolavloite/cloud-spanner-change-publisher-7fbee48f66f8).
+
 ## Usage in Existing Application
 Clone, install and include the following dependency to your application to use
 Spanner Change Publisher.
@@ -198,6 +200,17 @@ Subscriber subscriber =
 subscriber.startAsync().awaitRunning();
 ```
 
+## Limitations
+* Spanner Change Publisher use [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to determine when a
+  change has occurred. They cannot be used on tables that do not include a commit timestamp.
+* Deletes are not detected, unless these are soft deletes that only update a deleted flag in the corresponding table.
+* Spanner Change Publisher polls tables for changes. Polling on larger tables can take some time and cause some delay
+  before a change is detected. The default poll interval is 1 second and is configurable. It does support sharding to
+  lower the load on large tables. Take a look at the samples for Spanner Change Watcher for more information.
+* Spanner Change Publisher emits changes on a row level basis, including the commit timestamp of the change. It does not
+  emit an even containing all changes of a single transaction. If that is needed, the client application will need to
+  group the row level changes together based on the commit timestamp.
+* Spanner Change Publisher is not a managed solution and does not come with Cloud Spanner's SLO. 
 
 ## Support Level
 Please feel free to report issues and send pull requests, but note that this
