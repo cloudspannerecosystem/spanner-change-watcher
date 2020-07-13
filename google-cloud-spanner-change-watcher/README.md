@@ -18,7 +18,7 @@ mvn clean install
 
 ```xml
 <dependency>
-  <groupId>com.google.cloud</groupId>
+  <groupId>com.google.cloudspannerecosystem</groupId>
   <artifactId>google-cloud-spanner-change-watcher</artifactId>
   <version>0.1.0</version>
 </dependency>
