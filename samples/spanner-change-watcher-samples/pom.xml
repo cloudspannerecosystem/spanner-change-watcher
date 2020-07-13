@@ -23,7 +23,7 @@
 
   <dependencies>
     <dependency>
-      <groupId>com.google.cloud</groupId>
+      <groupId>com.google.cloudspannerecosystem</groupId>
       <artifactId>google-cloud-spanner-change-watcher</artifactId>
       <exclusions>
         <exclusion>
@@ -39,7 +39,7 @@
     
     <!-- Test dependency for integration test environment -->
     <dependency>
-      <groupId>com.google.cloud</groupId>
+      <groupId>com.google.cloudspannerecosystem</groupId>
       <artifactId>google-cloud-spanner-change-watcher</artifactId>
       <version>0.1.0</version>
       <type>test-jar</type>
