@@ -243,6 +243,7 @@
           <execution>
             <id>default</id>
             <configuration>
+              <includes>IT*</includes>
               <excludedGroups>com.google.cloud.spanner.watcher.it.StressIntegrationTest</excludedGroups>
             </configuration>
           </execution>
@@ -285,6 +286,7 @@
                   <goal>integration-test</goal>
                 </goals>
                 <configuration>
+                  <includes>IT*</includes>
                   <groups>com.google.cloud.spanner.watcher.it.StressIntegrationTest</groups>
                 </configuration>
               </execution>
