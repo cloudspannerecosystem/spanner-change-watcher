@@ -1,22 +1,47 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
+  <groupId>com.google.cloudspannerecosystem</groupId>
   <artifactId>spanner-change-watcher</artifactId>
   <version>0.1.0</version>
   <name>Google Cloud Spanner Change Watcher Parent</name>
   <description>Google Cloud Spanner Change Watcher Parent</description>
   <packaging>pom</packaging>
-  <parent>
-    <groupId>com.google.cloud</groupId>
-    <artifactId>google-cloud-shared-config</artifactId>
-    <version>0.4.0</version>
-  </parent>
   <organization>
     <name>Google LLC</name>
   </organization>
+  <distributionManagement>
+    <snapshotRepository>
+      <id>sonatype-nexus-snapshots</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+    </snapshotRepository>
+    <repository>
+      <id>sonatype-nexus-staging</id>
+      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+    </repository>
+  </distributionManagement>
+  <scm>
+    <connection>scm:git:git@github.com:cloudspannerecosystem/spanner-change-watcher.git</connection>
+    <developerConnection>scm:git:git@github.com:cloudspannerecosystem/spanner-change-watcher.git</developerConnection>
+    <url>https://github.com/cloudspannerecosystem/spanner-change-watcher</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <issueManagement>
+    <url>https://github.com/cloudspannerecosystem/spanner-change-watcher/issues</url>
+    <system>GitHub Issues</system>
+  </issueManagement>
+
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
   
   <properties>
     <java.version>1.8</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <skipITs>true</skipITs>
     
     <avro.version>1.9.2</avro.version>
     
@@ -105,6 +130,30 @@
     <pluginManagement>
       <plugins>
         <plugin>
+          <groupId>org.sonatype.plugins</groupId>
+          <artifactId>nexus-staging-maven-plugin</artifactId>
+          <version>1.6.8</version>
+          <extensions>true</extensions>
+          <configuration>
+            <serverId>ossrh</serverId>
+            <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+            <autoReleaseAfterClose>false</autoReleaseAfterClose>
+            <stagingProgressTimeoutMinutes>15</stagingProgressTimeoutMinutes>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-checkstyle-plugin</artifactId>
+          <version>3.1.0</version>
+          <dependencies>
+            <dependency>
+              <groupId>com.puppycrawl.tools</groupId>
+              <artifactId>checkstyle</artifactId>
+              <version>8.24</version>
+            </dependency>
+          </dependencies>
+        </plugin>
+        <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>3.0.0-M4</version>
@@ -137,6 +186,35 @@
           <execution>
             <id>enforce</id>
             <phase>none</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>checkstyle</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <headerLocation>java.header</headerLocation>
+              <configLocation>license-checks.xml</configLocation>
+              <consoleOutput>true</consoleOutput>
+              <failOnViolation>true</failOnViolation>
+              <violationSeverity>error</violationSeverity>
+              <failsOnError>true</failsOnError>
+              <includeTestSourceDirectory>true</includeTestSourceDirectory>
+              <!-- Explicitly set the source directory to avoid running checkstyle on generated sources. -->
+              <sourceDirectories>
+                <sourceDirectory>src/main</sourceDirectory>
+              </sourceDirectories>
+              <testSourceDirectories>
+                <testSourceDirectory>src/test</testSourceDirectory>
+              </testSourceDirectories>
+            </configuration>
           </execution>
         </executions>
       </plugin>

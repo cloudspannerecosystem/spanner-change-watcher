@@ -8,7 +8,7 @@
   <name>Google Cloud Spanner Change Publisher</name>
   <description>Google Cloud Spanner Data Change Publisher</description>
   <parent>
-    <groupId>com.google.cloud</groupId>
+    <groupId>com.google.cloudspannerecosystem</groupId>
     <artifactId>spanner-change-watcher</artifactId>
     <version>0.1.0</version>
   </parent>
