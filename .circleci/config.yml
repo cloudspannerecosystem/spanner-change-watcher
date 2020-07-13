@@ -37,7 +37,7 @@ jobs:
         steps:
             - run:
                 name: Run Integration Tests
-                command: mvn -B -Penable-integration-tests -DtrimStackTrace=false -fae verify --settings 'pom.xml'
+                command: mvn -B -Penable-integration-tests -DtrimStackTrace=false -fae verify
     - save_cache:
         paths:
         - ~/.m2
