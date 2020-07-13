@@ -246,16 +246,6 @@
               <excludedGroups>com.google.cloud.spanner.watcher.it.StressIntegrationTest</excludedGroups>
             </configuration>
           </execution>
-          <execution>
-            <id>stress-integration-test</id>
-            <goals>
-              <goal>integration-test</goal>
-            </goals>
-            <configuration>
-              <skip>${skipStressTests}</skip>
-              <groups>com.google.cloud.spanner.watcher.it.StressIntegrationTest</groups>
-            </configuration>
-          </execution>
         </executions>
       </plugin>
     </plugins>
@@ -278,9 +268,30 @@
     </profile>
     <profile>
       <id>stress-integration-tests</id>
-      <properties>
-        <skipStressTests>false</skipStressTests>
-      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <configuration>
+              <forkedProcessTimeoutInSeconds>3000</forkedProcessTimeoutInSeconds>
+              <forkCount>8</forkCount>
+              <argLine>-Xmx1024m</argLine>
+            </configuration>
+            <executions>
+              <execution>
+                <id>stress-integration-test</id>
+                <goals>
+                  <goal>integration-test</goal>
+                </goals>
+                <configuration>
+                  <groups>com.google.cloud.spanner.watcher.it.StressIntegrationTest</groups>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
     <profile>
       <id>release</id>
