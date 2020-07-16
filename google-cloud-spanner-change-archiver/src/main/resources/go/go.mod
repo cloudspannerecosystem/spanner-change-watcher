@@ -6,4 +6,4 @@ require (
 	cloud.google.com/go/storage v1.6.0
 )
 
-go 1.11
+go 1.13
