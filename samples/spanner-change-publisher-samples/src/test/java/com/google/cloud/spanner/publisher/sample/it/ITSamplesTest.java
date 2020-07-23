@@ -485,7 +485,7 @@ public class ITSamplesTest {
             TopicName.format(PubsubTestHelper.getPubsubProjectId(), topic));
         client.write(
             insertOrUpdateNumbers("NUMBERS1", 0, NUMBER_NAMES.length, Value.COMMIT_TIMESTAMP));
-        assertThat(systemExitLatch.await(30L, TimeUnit.SECONDS)).isTrue();
+        assertThat(systemExitLatch.await(60L, TimeUnit.SECONDS)).isTrue();
         String errors = berr.toString();
         assertThat(errors).contains("Database change publisher failed.");
         assertThat(errors).contains("State before failure: RUNNING");
