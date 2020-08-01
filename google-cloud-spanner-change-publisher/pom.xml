@@ -8,14 +8,14 @@
   <name>Google Cloud Spanner Change Publisher</name>
   <description>Google Cloud Spanner Data Change Publisher</description>
   <parent>
-    <groupId>com.google.cloud</groupId>
+    <groupId>com.google.cloudspannerecosystem</groupId>
     <artifactId>spanner-change-watcher</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
   </parent>
 
   <dependencies>
     <dependency>
-      <groupId>com.google.cloud</groupId>
+      <groupId>com.google.cloudspannerecosystem</groupId>
       <artifactId>google-cloud-spanner-change-watcher</artifactId>
       <exclusions>
         <exclusion>
@@ -65,9 +65,9 @@
     </dependency>
 
     <dependency>
-      <groupId>com.google.cloud</groupId>
+      <groupId>com.google.cloudspannerecosystem</groupId>
       <artifactId>google-cloud-spanner-change-watcher</artifactId>
-      <version>0.1.0</version>
+      <version>0.2.0</version>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
@@ -97,6 +97,17 @@
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>

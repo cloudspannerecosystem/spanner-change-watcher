@@ -11,20 +11,13 @@ be deployed as a standalone application.
 A further introduction to Spanner Change Publisher [can be found here](https://medium.com/@knutolavloite/cloud-spanner-change-publisher-7fbee48f66f8).
 
 ## Usage in Existing Application
-Clone, install and include the following dependency to your application to use
-Spanner Change Publisher.
-
-```
-git clone git@github.com:cloudspannerecosystem/spanner-change-watcher.git
-cd spanner-change-watcher
-mvn clean install
-```
+Include the following dependency in your application to use Spanner Change Publisher.
 
 ```xml
 <dependency>
-  <groupId>com.google.cloud</groupId>
+  <groupId>com.google.cloudspannerecosystem</groupId>
   <artifactId>google-cloud-spanner-change-publisher</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
