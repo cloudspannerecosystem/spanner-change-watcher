@@ -1,6 +1,8 @@
-# Spanner Change Watcher
+# Spanner Change Watcher Samples
 
 ## Introduction
+Samples for [Spanner Change Watcher](https://github.com/cloudspannerecosystem/spanner-change-watcher/tree/master/google-cloud-spanner-change-watcher).
+
 Spanner Change Watcher watches Spanner databases and tables for changes and
 emits events when changes are detected. This framework can be included in an
 existing application and used to trigger functionality or processes in that
@@ -62,11 +64,6 @@ watcher.addCallback(
     });
 watcher.startAsync().awaitRunning();
 ```
-
-### Further Samples
-Take a look at [Samples.java](../samples/spanner-change-watcher-samples/src/main/java/com/google/cloud/spanner/watcher/sample/Samples.java)
-for additional examples of more advanced use cases.
-
 
 ## Support Level
 Please feel free to report issues and send pull requests, but note that this
