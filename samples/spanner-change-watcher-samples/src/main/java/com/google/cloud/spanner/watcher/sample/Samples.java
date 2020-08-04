@@ -27,13 +27,18 @@ import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.TransactionContext;
+import com.google.cloud.spanner.TransactionRunner;
 import com.google.cloud.spanner.TransactionRunner.TransactionCallable;
 import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.watcher.CommitTimestampRepository;
+import com.google.cloud.spanner.watcher.DatabaseClientWithChangeSets;
+import com.google.cloud.spanner.watcher.DatabaseClientWithChangeSets.TransactionRunnerWithChangeSet;
 import com.google.cloud.spanner.watcher.FixedShardProvider;
 import com.google.cloud.spanner.watcher.SpannerCommitTimestampRepository;
+import com.google.cloud.spanner.watcher.SpannerDatabaseChangeSetPoller;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerDatabaseTailer;
+import com.google.cloud.spanner.watcher.SpannerTableChangeSetPoller;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
@@ -46,6 +51,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
@@ -601,6 +607,149 @@ public class Samples {
         });
     watcher.startAsync().awaitRunning();
     System.out.println("Started change watcher");
+    // Wait until we have received 3 changes.
+    latch.await();
+    // Stop the poller and wait for it to release all resources.
+    watcher.stopAsync().awaitTerminated();
+  }
+
+  /**
+   * Watch a database that contains one or more tables that do not have a commit timestamp column.
+   * Having a commit timestamp column in a data table can have a couple of disadvantages:
+   *
+   * <ol>
+   *   <li>A table that has been updated using DML with a PENDING_COMMIT_TIMESTAMP() function call
+   *       will no longer be readable during the remainder of the transaction (see {@link
+   *       https://cloud.google.com/spanner/docs/commit-timestamp#dml})
+   *   <li>A commit timestamp column alone should not be indexed. Instead, it should only be
+   *       included in an index where the first part of the index is not a monotonically increasing
+   *       value (see {@link https://cloud.google.com/spanner/docs/commit-timestamp#keys-indexes})
+   * </ol>
+   *
+   * An application can use a {@link SpannerTableChangeSetPoller} or {@link
+   * SpannerDatabaseChangeSetPoller} when the data table(s) do not contain a commit timestamp
+   * column.
+   *
+   * <p>Example data model:
+   *
+   * <pre>{@code
+   * -- This table keeps track of all read/write transactions.
+   * CREATE TABLE CHANGE_SETS (
+   *   CHANGE_SET_ID    STRING(MAX),
+   *   COMMIT_TIMESTAMP TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+   * ) PRIMARY KEY (CHANGE_SET_ID);
+   *
+   * -- This is the data table and contains a reference to the table that keeps track of all
+   * -- read/write transactions.
+   * CREATE TABLE DATA_TABLE (
+   *   ID             INT64,
+   *   NAME           STRING(MAX),
+   *   CHANGE_SET_ID  STRING(MAX)
+   * ) PRIMARY KEY (ID);
+   *
+   * -- Create a secondary index on the CHANGE_SET_ID column. This can safely be done, as the
+   * -- column will not contain monotonically increasing values.
+   * CREATE INDEX IDX_DATA_TABLE_CHANGE_SET_ID ON DATA_TABLE (CHANGE_SET_ID);
+   * }</pre>
+   */
+  public static void watchTableWithoutCommitTimestampColumn(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database // "my-database"
+      ) throws InterruptedException {
+
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    DatabaseId databaseId = DatabaseId.of(project, instance, database);
+    final CountDownLatch latch = new CountDownLatch(3);
+    SpannerDatabaseChangeWatcher watcher =
+        // SpannerDatabaseChangeSetPoller uses a CHANGE_SETS table (table name is configurable) to
+        // monitor for changes to the data tables that reference this table.
+        SpannerDatabaseChangeSetPoller.newBuilder(spanner, databaseId).allTables().build();
+    watcher.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            System.out.printf(
+                "Received change for table %s: %s%n", table, row.asStruct().toString());
+            latch.countDown();
+          }
+        });
+    watcher.startAsync().awaitRunning();
+    System.out.println("Started change watcher");
+
+    // SpannerDatabaseChangeSetPoller requires all read/write transactions to add a record to the
+    // CHANGE_SETS table for the change to be picked up. An application can handle this manually, or
+    // an application can use the DatabaseClient wrapper that is supplied by the
+    // spanner-change-watcher library.
+
+    // Manually adding the CHANGE_SET record.
+    DatabaseClient client = spanner.getDatabaseClient(databaseId);
+    TransactionRunner runner = client.readWriteTransaction();
+    String changeSetId = UUID.randomUUID().toString();
+    runner.run(
+        new TransactionCallable<Long>() {
+          @Override
+          public Long run(TransactionContext transaction) throws Exception {
+            // Buffer a mutation for the CHANGE_SET table. This will automatically be sent together
+            // with the Commit RPC when the transaction is committed.
+            transaction.buffer(
+                Mutation.newInsertOrUpdateBuilder("CHANGE_SETS")
+                    .set("CHANGE_SET_ID")
+                    .to(changeSetId)
+                    .set("COMMIT_TIMESTAMP")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build());
+            // Execute an update statement. This statement should use the unique change set id that
+            // had been created for this transaction.
+            return transaction.executeUpdate(
+                Statement.newBuilder(
+                        "INSERT INTO DATA_TABLE (ID, NAME, CHANGE_SET_ID) VALUES (@id, @name, @changeSet)")
+                    .bind("id")
+                    .to(1L)
+                    .bind("name")
+                    .to("One")
+                    .bind("changeSet")
+                    .to(changeSetId)
+                    .build());
+          }
+        });
+
+    // Adding the CHANGE_SET record by using the DatabaseClientWithChangeSets wrapper.
+    DatabaseClientWithChangeSets clientWithChangeSets = DatabaseClientWithChangeSets.of(client);
+    // Create a transaction runner. This runner will automatically generate a unique change set id
+    // and it will automatically insert a record to the CHANGE_SETS table. All DML statements and
+    // mutations in the transaction must use the change set id that is associated with the
+    // transaction runner.
+    TransactionRunnerWithChangeSet runnerWithChangeSet =
+        clientWithChangeSets.readWriteTransaction();
+    runnerWithChangeSet.run(
+        new TransactionCallable<Long>() {
+          @Override
+          public Long run(TransactionContext transaction) throws Exception {
+            // Add a mutation for the data table.
+            transaction.buffer(
+                Mutation.newInsertOrUpdateBuilder("DATA_TABLE")
+                    .set("ID")
+                    .to(2L)
+                    .set("NAME")
+                    .to("Two")
+                    .set("CHANGE_SET_ID")
+                    .to(runnerWithChangeSet.getChangeSetId())
+                    .build());
+            // Execute an update statement.
+            return transaction.executeUpdate(
+                Statement.newBuilder(
+                        "INSERT INTO DATA_TABLE (ID, NAME, CHANGE_SET_ID) VALUES (@id, @name, @changeSet)")
+                    .bind("id")
+                    .to(3L)
+                    .bind("name")
+                    .to("Three")
+                    .bind("changeSet")
+                    .to(runnerWithChangeSet.getChangeSetId())
+                    .build());
+          }
+        });
+
     // Wait until we have received 3 changes.
     latch.await();
     // Stop the poller and wait for it to release all resources.

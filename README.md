@@ -18,8 +18,11 @@ tables for data changes and emits events when changes are detected. This
 framework can be included in existing applications and used to trigger
 functionality or processes in that application based on data change events.
 
-Spanner Change Watcher uses [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to determine when a change has occurred.
-The framework cannot be used for tables that do not include a commit timestamp.
+Spanner Change Watcher by default uses [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp)
+to determine when a change has occurred.
+
+The framework can also be used for tables that do not include a commit timestamp, but this does require
+the use of an additional CHANGE_SETS table that registers all read/write transactions.
 
 See [Spanner Change Watcher README file](./google-cloud-spanner-change-watcher/README.md)
 for more information.
@@ -100,23 +103,18 @@ See [Spanner Change Archiver README file](./google-cloud-spanner-change-archiver
 for more information.
 
 ## Limitations
-* Spanner Change Watcher and Spanner Change Publisher use [commit
-  timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to
-  determine when a change has occurred. They cannot be used on tables that do
-  not include a commit timestamp.
-* Deletes are not detected, unless these are soft deletes that only update a
-  deleted flag in the corresponding table.
-* Spanner Change Watcher polls tables for changes. Polling on larger tables can
-  take some time and cause some delay before a change is detected. The default
-  poll interval is 1 second and is configurable. If multiple changes happen
+* Spanner Change Watcher and Spanner Change Publisher by default use
+  [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to determine when a
+  change has occurred. Tables that do not include a commit timestamp can also be monitored, but require
+  the creation of an additional CHANGE_SETS table that registers all read/write transactions.
+* Deletes are not detected, unless these are soft deletes that only update a deleted flag in the corresponding table.
+* Spanner Change Watcher polls tables for changes. Polling on larger tables can take some time and cause some delay
+  before a change is detected. The default poll interval is 1 second and is configurable. If multiple changes happen
   during a single poll interval, only the last change will be detected.
-* Spanner Change Watcher emits changes on a row level basis, including columns
-  that have not changed, and the commit timestamp of the change. It does not
-  emit an event containing all changes of a single transaction. If that is
-  needed, the client application will need to group the row level changes
-  together based on the commit timestamp.
-* Spanner Change Watcher is not a managed solution and does not come with Cloud
-  Spanner's SLO.
+* Spanner Change Watcher emits changes on a row level basis, including the commit timestamp of the change. It does not
+  emit an event containing all changes of a single transaction. If that is needed, the client application will need to
+  group the row level changes together based on the commit timestamp.
+* Spanner Change Watcher is not a managed solution and does not come with Cloud Spanner's SLO.
 
 ## Support Level
 Please feel free to report issues and send pull requests, but note that this
