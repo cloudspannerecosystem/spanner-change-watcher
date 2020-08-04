@@ -593,8 +593,11 @@ public class Samples {
     SpannerDatabaseChangeWatcher watcher =
         SpannerDatabaseTailer.newBuilder(spanner, databaseId)
             .allTables()
-            // Use the commit timestamp column `LAST_MODIFIED` for all tables.
-            .setCommitTimestampColumnFunction((tableId) -> "LAST_MODIFIED")
+            // Use the commit timestamp column `LAST_MODIFIED` for all data tables and
+            // `COMMIT_TIMESTAMP` for the CHANGE_SETS table.
+            .setCommitTimestampColumnFunction(
+                (tableId) ->
+                    tableId.getTable().equals("CHANGE_SETS") ? "COMMIT_TIMESTAMP" : "LAST_MODIFIED")
             .build();
     watcher.addCallback(
         new RowChangeCallback() {
