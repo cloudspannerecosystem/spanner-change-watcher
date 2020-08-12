@@ -74,7 +74,10 @@ public class ITSamplesTest {
                 "CREATE TABLE MY_TABLE (ID INT64, NAME STRING(MAX), SHARD_ID STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE INDEX IDX_MY_TABLE_SHARDING ON MY_TABLE (SHARD_ID, LAST_MODIFIED DESC)",
                 "CREATE TABLE MULTIPLE_COMMIT_TS (ID INT64, NAME STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true), LAST_BATCH_JOB TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
-                "CREATE TABLE NUMBERS_WITHOUT_COMMIT_TIMESTAMP (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP) PRIMARY KEY (ID)"));
+                "CREATE TABLE NUMBERS_WITHOUT_COMMIT_TIMESTAMP (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP) PRIMARY KEY (ID)",
+                "CREATE TABLE CHANGE_SETS (CHANGE_SET_ID STRING(MAX), COMMIT_TIMESTAMP TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (CHANGE_SET_ID)",
+                "CREATE TABLE DATA_TABLE (ID INT64, NAME STRING(MAX), CHANGE_SET_ID STRING(MAX)) PRIMARY KEY (ID)",
+                "CREATE INDEX IDX_DATA_TABLE_CHANGE_SET_ID ON DATA_TABLE (CHANGE_SET_ID)"));
     databaseId = database.getId();
     client = env.getSpanner().getDatabaseClient(databaseId);
     logger.info(String.format("Created database %s", database.getId().toString()));
@@ -670,5 +673,28 @@ public class ITSamplesTest {
       assertThat(res)
           .contains(String.format("Received change for table %s: %s%n", table, row.toString()));
     }
+  }
+
+  @Test
+  public void testWatchTableWithoutCommitTimestampColumn() throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    Future<String> out =
+        runSample(
+            () -> {
+              Samples.watchTableWithoutCommitTimestampColumn(
+                  databaseId.getInstanceId().getProject(),
+                  databaseId.getInstanceId().getInstance(),
+                  databaseId.getDatabase());
+            },
+            latch);
+    latch.await(30L, TimeUnit.SECONDS);
+    // The sample itself already writes 3 changes.
+    String res = out.get(60L, TimeUnit.SECONDS);
+    TableId table = TableId.of(databaseId, "DATA_TABLE");
+    TableId changeSetTable = TableId.of(databaseId, "CHANGE_SETS");
+    assertThat(res).contains(String.format("Received change for table %s: [1, One, ", table));
+    assertThat(res).contains(String.format("Received change for table %s: [2, Two, ", table));
+    assertThat(res).contains(String.format("Received change for table %s: [3, Three, ", table));
+    assertThat(res).doesNotContain(String.format("Received change for table %s:", changeSetTable));
   }
 }

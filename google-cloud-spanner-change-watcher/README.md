@@ -70,14 +70,18 @@ Take a look at [Samples.java](../samples/spanner-change-watcher-samples/src/main
 for additional examples of more advanced use cases.
 
 ## Limitations
-* Spanner Change Watcher and Spanner Change Publisher use [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to determine when a
-  change has occurred. They cannot be used on tables that do not include a commit timestamp.
+* Spanner Change Watcher and Spanner Change Publisher by default use
+  [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to determine when a
+  change has occurred. Tables that do not include a commit timestamp can also be monitored, but require
+  the creation of an additional CHANGE_SETS table that registers all read/write transactions.
 * Deletes are not detected, unless these are soft deletes that only update a deleted flag in the corresponding table.
 * Spanner Change Watcher polls tables for changes. Polling on larger tables can take some time and cause some delay
   before a change is detected. The default poll interval is 1 second and is configurable. It does support sharding to
-  lower the load on large tables. Take a look at the samples for more information.
+  reduce the load on large tables. It is also possible to use an additional CHANGE_SETS table that registers all
+  read/write transactions, and only poll this table using a SpannerTableChangeSetPoller instead of polling the data tables.
+  Take a look at the samples for more information.
 * Spanner Change Watcher emits changes on a row level basis, including the commit timestamp of the change. It does not
-  emit an even containing all changes of a single transaction. If that is needed, the client application will need to
+  emit an event containing all changes of a single transaction. If that is needed, the client application will need to
   group the row level changes together based on the commit timestamp.
 * Spanner Change Watcher is not a managed solution and does not come with Cloud Spanner's SLO. 
 
