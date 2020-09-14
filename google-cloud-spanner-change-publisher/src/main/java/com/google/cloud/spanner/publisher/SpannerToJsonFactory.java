@@ -76,6 +76,10 @@ public class SpannerToJsonFactory implements ConverterFactory {
                   row.getTimestampList(i).stream()
                       .forEach(t -> arrayObject.add(t == null ? null : t.toString()));
                   break;
+                case NUMERIC:
+                  row.getBigDecimalList(i).stream()
+                      .forEach(t -> arrayObject.add(t == null ? null : t.toString()));
+                  break;
                 case STRUCT:
                 case ARRAY:
                 default:
@@ -109,6 +113,9 @@ public class SpannerToJsonFactory implements ConverterFactory {
               break;
             case TIMESTAMP:
               obj.addProperty(columnName, row.getTimestamp(i).toString());
+              break;
+            case NUMERIC:
+              obj.addProperty(columnName, row.getBigDecimal(i).toString());
               break;
             case STRUCT:
             default:

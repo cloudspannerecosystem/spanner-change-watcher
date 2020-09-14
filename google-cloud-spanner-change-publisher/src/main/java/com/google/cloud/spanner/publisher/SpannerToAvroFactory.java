@@ -367,6 +367,39 @@ public class SpannerToAvroFactory implements ConverterFactory {
                       .noDefault();
                 }
                 break;
+              case "NUMERIC":
+                // Numeric handled as String type
+                logger.log(Level.FINE, "Made ARRAY<NUMERIC>");
+                if (nullable) {
+                  avroSchemaBuilder
+                      .name(name)
+                      .type()
+                      .unionOf()
+                      .nullType()
+                      .and()
+                      .array()
+                      .items()
+                      .unionOf()
+                      .nullType()
+                      .and()
+                      .stringType()
+                      .endUnion()
+                      .endUnion()
+                      .noDefault();
+                } else {
+                  avroSchemaBuilder
+                      .name(name)
+                      .type()
+                      .array()
+                      .items()
+                      .unionOf()
+                      .nullType()
+                      .and()
+                      .stringType()
+                      .endUnion()
+                      .noDefault();
+                }
+                break;
             }
             break;
           case "BOOL":
@@ -420,6 +453,14 @@ public class SpannerToAvroFactory implements ConverterFactory {
             break;
           case "TIMESTAMP":
             logger.log(Level.FINE, "Made TIMESTAMP");
+            if (nullable) {
+              avroSchemaBuilder.name(name).type().optional().stringType();
+            } else {
+              avroSchemaBuilder.name(name).type().stringType().noDefault();
+            }
+            break;
+          case "NUMERIC":
+            logger.log(Level.FINE, "Made NUMERIC");
             if (nullable) {
               avroSchemaBuilder.name(name).type().optional().stringType();
             } else {
@@ -506,6 +547,10 @@ public class SpannerToAvroFactory implements ConverterFactory {
                   logger.log(Level.FINE, "Put ARRAY<TIMESTAMP>");
                   record.put(x, toStringCollection(row.getTimestampList(x)));
                   break;
+                case "NUMERIC":
+                  logger.log(Level.FINE, "Put ARRAY<NUMERIC>");
+                  record.put(x, toStringCollection(row.getBigDecimalList(x)));
+                  break;
                 default:
                   logger.warning(
                       "Unknown Data type when generating Array Schema: " + arrayTypeString);
@@ -539,6 +584,10 @@ public class SpannerToAvroFactory implements ConverterFactory {
             case "TIMESTAMP":
               logger.log(Level.FINE, "Put TIMESTAMP");
               record.put(x, row.getTimestamp(x).toString());
+              break;
+            case "NUMERIC":
+              logger.log(Level.FINE, "Put NUMERIC");
+              record.put(x, row.getBigDecimal(x).toString());
               break;
             default:
               logger.warning(

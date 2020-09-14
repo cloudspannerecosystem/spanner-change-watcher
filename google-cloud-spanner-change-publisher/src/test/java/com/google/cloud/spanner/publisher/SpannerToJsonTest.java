@@ -34,6 +34,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.protobuf.ByteString;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -78,46 +79,55 @@ public class SpannerToJsonTest {
             .to(Timestamp.parseTimestamp("2020-03-31T21:21:15.120Z"))
             .set("C14")
             .to((Timestamp) null)
-            // ARRAY types
             .set("C15")
-            .toInt64Array(Arrays.asList(1L, null, 3L, null, 5L))
+            .to(new BigDecimal("3.14"))
             .set("C16")
-            .toInt64Array((long[]) null)
+            .to((BigDecimal) null)
+            // ARRAY types
             .set("C17")
-            .toBoolArray(Arrays.asList(true, null, false, null))
+            .toInt64Array(Arrays.asList(1L, null, 3L, null, 5L))
             .set("C18")
-            .toBoolArray((boolean[]) null)
+            .toInt64Array((long[]) null)
             .set("C19")
+            .toBoolArray(Arrays.asList(true, null, false, null))
+            .set("C20")
+            .toBoolArray((boolean[]) null)
+            .set("C21")
             .toBytesArray(
                 Arrays.asList(ByteArray.copyFrom("TEST"), null, ByteArray.copyFrom("FOO"), null))
-            .set("C20")
-            .toBytesArray(null)
-            .set("C21")
-            .toStringArray(Arrays.asList("TEST", null, "FOO", null))
             .set("C22")
-            .toStringArray(null)
+            .toBytesArray(null)
             .set("C23")
-            .toFloat64Array(Arrays.asList(3.14D, null, 6.626D, null))
+            .toStringArray(Arrays.asList("TEST", null, "FOO", null))
             .set("C24")
-            .toFloat64Array((double[]) null)
+            .toStringArray(null)
             .set("C25")
+            .toFloat64Array(Arrays.asList(3.14D, null, 6.626D, null))
+            .set("C26")
+            .toFloat64Array((double[]) null)
+            .set("C27")
             .toDateArray(
                 Arrays.asList(
                     Date.fromYearMonthDay(2020, 3, 31),
                     null,
                     Date.fromYearMonthDay(1970, 1, 1),
                     null))
-            .set("C26")
+            .set("C28")
             .toDateArray(null)
-            .set("C27")
+            .set("C29")
             .toTimestampArray(
                 Arrays.asList(
                     Timestamp.parseTimestamp("2020-03-31T21:21:15.120Z"),
                     null,
                     Timestamp.ofTimeSecondsAndNanos(0, 0),
                     null))
-            .set("C28")
+            .set("C30")
             .toTimestampArray(null)
+            .set("C31")
+            .toNumericArray(
+                Arrays.asList(new BigDecimal("3.14"), null, new BigDecimal("6.6260"), null))
+            .set("C32")
+            .toNumericArray(null)
             .build();
 
     ByteString data = converter.convert(row);
@@ -141,29 +151,33 @@ public class SpannerToJsonTest {
     assertThat(record.get("C12")).isEqualTo(JsonNull.INSTANCE);
     assertThat(record.get("C13")).isEqualTo(new JsonPrimitive("2020-03-31T21:21:15.120000000Z"));
     assertThat(record.get("C14")).isEqualTo(JsonNull.INSTANCE);
-    // ARRAY types
-    assertThat(record.get("C15")).isEqualTo(toJsonArray(1L, null, 3L, null, 5L));
+    assertThat(record.get("C15")).isEqualTo(new JsonPrimitive("3.14"));
     assertThat(record.get("C16")).isEqualTo(JsonNull.INSTANCE);
-    assertThat(record.get("C17")).isEqualTo(toJsonArray(true, null, false, null));
+    // ARRAY types
+    assertThat(record.get("C17")).isEqualTo(toJsonArray(1L, null, 3L, null, 5L));
     assertThat(record.get("C18")).isEqualTo(JsonNull.INSTANCE);
-    assertThat(record.get("C19"))
+    assertThat(record.get("C19")).isEqualTo(toJsonArray(true, null, false, null));
+    assertThat(record.get("C20")).isEqualTo(JsonNull.INSTANCE);
+    assertThat(record.get("C21"))
         .isEqualTo(
             toJsonArray(
                 ByteArray.copyFrom("TEST").toBase64(),
                 null,
                 ByteArray.copyFrom("FOO").toBase64(),
                 null));
-    assertThat(record.get("C20")).isEqualTo(JsonNull.INSTANCE);
-    assertThat(record.get("C21")).isEqualTo(toJsonArray("TEST", null, "FOO", null));
     assertThat(record.get("C22")).isEqualTo(JsonNull.INSTANCE);
-    assertThat(record.get("C23")).isEqualTo(toJsonArray(3.14D, null, 6.626D, null));
+    assertThat(record.get("C23")).isEqualTo(toJsonArray("TEST", null, "FOO", null));
     assertThat(record.get("C24")).isEqualTo(JsonNull.INSTANCE);
-    assertThat(record.get("C25")).isEqualTo(toJsonArray("2020-03-31", null, "1970-01-01", null));
+    assertThat(record.get("C25")).isEqualTo(toJsonArray(3.14D, null, 6.626D, null));
     assertThat(record.get("C26")).isEqualTo(JsonNull.INSTANCE);
-    assertThat(record.get("C27"))
+    assertThat(record.get("C27")).isEqualTo(toJsonArray("2020-03-31", null, "1970-01-01", null));
+    assertThat(record.get("C28")).isEqualTo(JsonNull.INSTANCE);
+    assertThat(record.get("C29"))
         .isEqualTo(
             toJsonArray("2020-03-31T21:21:15.120000000Z", null, "1970-01-01T00:00:00Z", null));
-    assertThat(record.get("C28")).isEqualTo(JsonNull.INSTANCE);
+    assertThat(record.get("C30")).isEqualTo(JsonNull.INSTANCE);
+    assertThat(record.get("C31")).isEqualTo(toJsonArray("3.14", null, "6.6260", null));
+    assertThat(record.get("C32")).isEqualTo(JsonNull.INSTANCE);
   }
 
   private static JsonArray toJsonArray(Long... values) {

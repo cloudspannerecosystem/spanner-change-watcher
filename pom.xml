@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.google.cloudspannerecosystem</groupId>
   <artifactId>spanner-change-watcher</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <name>Google Cloud Spanner Change Watcher Parent</name>
   <description>Google Cloud Spanner Change Watcher and Publisher is a framework that emits events when a row has been changed in a Cloud Spanner database. These row change events can be captured and processed in-process as part of a user application, or they can be published to Google Cloud Pubsub for consumption by any other application.</description>
   <url>https://github.com/cloudspannerecosystem/spanner-change-watcher</url>
@@ -67,7 +67,7 @@
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-watcher</artifactId>
-        <version>0.2.0</version>
+        <version>0.3.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.conscrypt</groupId>
@@ -78,12 +78,12 @@
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-publisher</artifactId>
-        <version>0.2.0</version>
+        <version>0.3.0</version>
       </dependency>
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-archiver</artifactId>
-        <version>0.2.0</version>
+        <version>0.3.0</version>
       </dependency>
       
       <dependency>
@@ -91,13 +91,13 @@
         <artifactId>google-cloud-spanner-bom</artifactId>
         <type>pom</type>
         <scope>import</scope>
-        <version>1.58.0</version>
+        <version>1.61.0</version>
       </dependency>
-      
+       
       <dependency>
         <groupId>com.google.cloud</groupId>
         <artifactId>libraries-bom</artifactId>
-        <version>8.0.0</version>
+        <version>10.1.0</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -150,9 +150,6 @@
             <serverId>ossrh</serverId>
             <nexusUrl>https://oss.sonatype.org/</nexusUrl>
             <autoReleaseAfterClose>true</autoReleaseAfterClose>
-            <!-- 
-            <stagingProgressTimeoutMinutes>15</stagingProgressTimeoutMinutes>
-             -->
           </configuration>
         </plugin>
         <plugin>

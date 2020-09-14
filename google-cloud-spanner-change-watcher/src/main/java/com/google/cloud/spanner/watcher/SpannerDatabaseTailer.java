@@ -303,7 +303,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
   private final ScheduledExecutorService executor;
   private final boolean isOwnedExecutor;
   private final java.util.function.Function<TableId, String> commitTimestampColumnFunction;
-  private ImmutableList<TableId> tables;
+  private List<TableId> tables;
   private Map<TableId, SpannerTableChangeWatcher> watchers;
   private final List<RowChangeCallback> callbacks = new LinkedList<>();
 
@@ -329,7 +329,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
     this.commitTimestampColumnFunction = builder.commitTimestampColumnFunction;
   }
 
-  private ImmutableList<TableId> findTableNames(DatabaseClient client) {
+  private List<TableId> findTableNames(DatabaseClient client) {
     Statement statement =
         Statement.newBuilder(LIST_TABLE_NAMES_STATEMENT)
             .bind("excluded")
@@ -343,7 +343,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
             .bind("catalog")
             .to(catalog)
             .build();
-    ImmutableList<TableId> tables =
+    List<TableId> tables =
         client
             .singleUse()
             .executeQueryAsync(statement)
@@ -389,7 +389,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
           @Override
           public void run() {
             try {
-              ImmutableList<TableId> tables = getTables();
+              List<TableId> tables = getTables();
               if (tables.isEmpty()) {
                 throw SpannerExceptionFactory.newSpannerException(
                     ErrorCode.NOT_FOUND,
@@ -432,7 +432,7 @@ public class SpannerDatabaseTailer extends AbstractApiService
   }
 
   @Override
-  public ImmutableList<TableId> getTables() {
+  public List<TableId> getTables() {
     synchronized (lock) {
       if (tables == null) {
         tables = findTableNames(spanner.getDatabaseClient(databaseId));

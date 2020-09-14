@@ -31,8 +31,8 @@ import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.StructReader;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
-import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 
@@ -133,8 +133,7 @@ public class SpannerUtils {
 
   /** Returns the primary key columns of a table. */
   @InternalApi
-  public static ApiFuture<ImmutableList<String>> getPrimaryKeyColumns(
-      DatabaseClient client, TableId table) {
+  public static ApiFuture<List<String>> getPrimaryKeyColumns(DatabaseClient client, TableId table) {
     try (AsyncResultSet rs =
         client
             .singleUse()

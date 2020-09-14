@@ -40,6 +40,8 @@ import io.grpc.Server;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -48,16 +50,26 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.threeten.bp.Duration;
 
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class SpannerDatabaseChangeEventPublisherTest extends AbstractMockServerTest {
   private static MockPubSubServer mockPubSub;
   private static Server pubSubServer;
   private static InetSocketAddress pubSubAddress;
   private static MockPublisherServiceImpl publisherService;
   private static MockSubscriberServiceImpl subscriberService;
+
+  @Parameter public ConverterFactory converterFactory;
+
+  @Parameters(name = "converter factory = {0}")
+  public static Collection<Object[]> data() {
+    return Arrays.asList(
+        new Object[][] {{SpannerToJsonFactory.INSTANCE}, {SpannerToAvroFactory.INSTANCE}});
+  }
 
   @BeforeClass
   public static void setupPubSub() throws IOException {
@@ -129,6 +141,7 @@ public class SpannerDatabaseChangeEventPublisherTest extends AbstractMockServerT
             .usePlainText()
             .setEndpoint("localhost:" + pubSubServer.getPort())
             .setTopicNameFormat("projects/p/topics/%table%-updates")
+            .setConverterFactory(converterFactory)
             .build();
     publisher.startAsync().awaitRunning();
     assertThat(latch.await(10L, TimeUnit.SECONDS)).isTrue();
