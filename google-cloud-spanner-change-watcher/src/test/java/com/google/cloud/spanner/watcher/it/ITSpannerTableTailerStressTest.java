@@ -46,6 +46,7 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -470,6 +471,16 @@ public class ITSpannerTableTailerStressTest {
     }
 
     @Override
+    public BigDecimal getBigDecimal(int columnIndex) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public BigDecimal getBigDecimal(String columnName) {
+      return values.get(columnName).getNumeric();
+    }
+
+    @Override
     public boolean[] getBooleanArray(int columnIndex) {
       throw new UnsupportedOperationException();
     }
@@ -567,6 +578,16 @@ public class ITSpannerTableTailerStressTest {
     @Override
     public List<Date> getDateList(String columnName) {
       return values.get(columnName).getDateArray();
+    }
+
+    @Override
+    public List<BigDecimal> getBigDecimalList(int columnIndex) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<BigDecimal> getBigDecimalList(String columnName) {
+      return values.get(columnName).getNumericArray();
     }
 
     @Override

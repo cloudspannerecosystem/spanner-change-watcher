@@ -48,6 +48,7 @@ public class RandomResultSetGenerator {
         Type.newBuilder().setCode(TypeCode.BYTES).build(),
         Type.newBuilder().setCode(TypeCode.DATE).build(),
         Type.newBuilder().setCode(TypeCode.TIMESTAMP).build(),
+        Type.newBuilder().setCode(TypeCode.NUMERIC).build(),
         Type.newBuilder()
             .setCode(TypeCode.ARRAY)
             .setArrayElementType(Type.newBuilder().setCode(TypeCode.BOOL))
@@ -75,6 +76,10 @@ public class RandomResultSetGenerator {
         Type.newBuilder()
             .setCode(TypeCode.ARRAY)
             .setArrayElementType(Type.newBuilder().setCode(TypeCode.TIMESTAMP))
+            .build(),
+        Type.newBuilder()
+            .setCode(TypeCode.ARRAY)
+            .setArrayElementType(Type.newBuilder().setCode(TypeCode.NUMERIC))
             .build(),
       };
 
@@ -245,6 +250,9 @@ public class RandomResultSetGenerator {
                       .setNanos(random.nextInt(1000_000_000))
                       .build());
           builder.setStringValue(Timestamp.fromProto(ts).toString());
+          break;
+        case NUMERIC:
+          builder.setStringValue(random.nextInt() + "." + random.nextInt(1000000000));
           break;
         case STRUCT:
         case TYPE_CODE_UNSPECIFIED:

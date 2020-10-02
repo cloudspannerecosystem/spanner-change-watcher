@@ -5,14 +5,14 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.google.cloudspannerecosystem</groupId>
   <artifactId>spanner-change-publisher-samples</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <packaging>jar</packaging>
   <name>Google Cloud Spanner Change Publisher Samples</name>
   <description>Google Cloud Spanner Data Change Publisher Samples</description>
   <parent>
     <groupId>com.google.cloudspannerecosystem</groupId>
     <artifactId>spanner-change-watcher</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <relativePath>../..</relativePath>
   </parent>
   
@@ -42,14 +42,14 @@
     <dependency>
       <groupId>com.google.cloudspannerecosystem</groupId>
       <artifactId>google-cloud-spanner-change-publisher</artifactId>
-      <version>0.2.0</version>
+      <version>0.3.0</version>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.google.cloudspannerecosystem</groupId>
       <artifactId>google-cloud-spanner-change-watcher</artifactId>
-      <version>0.2.0</version>
+      <version>0.3.0</version>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
