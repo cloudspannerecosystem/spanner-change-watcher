@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.google.cloudspannerecosystem</groupId>
   <artifactId>spanner-change-watcher</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
   <name>Google Cloud Spanner Change Watcher Parent</name>
   <description>Google Cloud Spanner Change Watcher and Publisher is a framework that emits events when a row has been changed in a Cloud Spanner database. These row change events can be captured and processed in-process as part of a user application, or they can be published to Google Cloud Pubsub for consumption by any other application.</description>
   <url>https://github.com/cloudspannerecosystem/spanner-change-watcher</url>
@@ -57,6 +57,7 @@
     
     <avro.version>1.9.2</avro.version>
     
+    <gax.version>1.60.1</gax.version>
     <junit.version>4.13.1</junit.version>
     <truth.version>1.0.1</truth.version>
     <mockito.version>3.3.3</mockito.version>
@@ -67,7 +68,7 @@
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-watcher</artifactId>
-        <version>0.3.0</version>
+        <version>0.4.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.conscrypt</groupId>
@@ -78,12 +79,12 @@
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-publisher</artifactId>
-        <version>0.3.0</version>
+        <version>0.4.0</version>
       </dependency>
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-archiver</artifactId>
-        <version>0.3.0</version>
+        <version>0.4.0</version>
       </dependency>
       
       <dependency>
@@ -91,13 +92,13 @@
         <artifactId>google-cloud-spanner-bom</artifactId>
         <type>pom</type>
         <scope>import</scope>
-        <version>2.0.2</version>
+        <version>3.3.2</version>
       </dependency>
        
       <dependency>
         <groupId>com.google.cloud</groupId>
         <artifactId>libraries-bom</artifactId>
-        <version>10.1.0</version>
+        <version>16.3.0</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
