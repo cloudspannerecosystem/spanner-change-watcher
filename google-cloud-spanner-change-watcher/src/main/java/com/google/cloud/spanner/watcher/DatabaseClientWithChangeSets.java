@@ -491,7 +491,7 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
    */
   @Override
   public TransactionManagerWithChangeSet transactionManager(TransactionOption... options) {
-    return new TransactionManagerWithChangeSetImpl(client.transactionManager());
+    return new TransactionManagerWithChangeSetImpl(client.transactionManager(options));
   }
 
   /**
@@ -530,7 +530,7 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
    */
   @Override
   public AsyncRunnerWithChangeSet runAsync(TransactionOption... options) {
-    return new AsyncRunnerWithChangeSetImpl(client.runAsync());
+    return new AsyncRunnerWithChangeSetImpl(client.runAsync(options));
   }
 
   /**
@@ -581,7 +581,7 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
   @Override
   public AsyncTransactionManagerWithChangeSet transactionManagerAsync(
       TransactionOption... options) {
-    return new AsyncTransactionManagerWithChangeSetImpl(client.transactionManagerAsync());
+    return new AsyncTransactionManagerWithChangeSetImpl(client.transactionManagerAsync(options));
   }
 
   @Override
@@ -616,7 +616,7 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
 
   @Override
   public long executePartitionedUpdate(Statement stmt, UpdateOption... options) {
-    return client.executePartitionedUpdate(stmt);
+    return client.executePartitionedUpdate(stmt, options);
   }
 
   @Override
