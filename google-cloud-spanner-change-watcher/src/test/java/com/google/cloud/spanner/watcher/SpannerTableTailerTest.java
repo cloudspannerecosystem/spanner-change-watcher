@@ -429,4 +429,34 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
     tailer.startAsync();
     assertThat(res.get(500L, TimeUnit.SECONDS)).isTrue();
   }
+
+  @Test
+  public void testNotNullSharding() throws Exception {
+    Spanner spanner = getSpanner();
+    DatabaseId db = DatabaseId.of("p", "i", "d");
+    final AtomicInteger receivedRows = new AtomicInteger();
+    final CountDownLatch latch = new CountDownLatch(SELECT_FOO_WITH_NOT_NULL_SHARDING_ROW_COUNT);
+    SpannerTableTailer tailer =
+        SpannerTableTailer.newBuilder(spanner, TableId.of(db, "Foo"))
+            .setShardProvider(NotNullShardProvider.create("ShardId"))
+            .setTableHint("@{FORCE_INDEX=Idx_SecondaryIndex}")
+            .setPollInterval(Duration.ofMillis(10L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, db)
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            receivedRows.incrementAndGet();
+            latch.countDown();
+          }
+        });
+    tailer.startAsync().awaitRunning();
+    latch.await(5L, TimeUnit.SECONDS);
+    tailer.stopAsync().awaitTerminated();
+    assertThat(receivedRows.get()).isEqualTo(SELECT_FOO_WITH_NOT_NULL_SHARDING_ROW_COUNT);
+  }
 }

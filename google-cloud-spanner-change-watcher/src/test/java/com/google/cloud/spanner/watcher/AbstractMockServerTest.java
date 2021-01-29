@@ -490,6 +490,7 @@ public abstract class AbstractMockServerTest {
           .to(Timestamp.MIN_VALUE)
           .build();
   public static final int SELECT_FOO_ROW_COUNT = 10;
+
   public static final Statement SELECT_FOO_WITH_SHARDING_PER_DAY_STATEMENT =
       Statement.newBuilder(
               String.format(SpannerTableTailer.POLL_QUERY, "`Foo`", "LastModified")
@@ -508,6 +509,20 @@ public abstract class AbstractMockServerTest {
           .to(Timestamp.MIN_VALUE)
           .build();
   public static final int SELECT_FOO_WITH_SHARDING_PER_DAY_ROW_COUNT = 5;
+
+  public static final Statement SELECT_FOO_WITH_NOT_NULL_SHARDING_STATEMENT =
+      Statement.newBuilder(
+              String.format(
+                      SpannerTableTailer.POLL_QUERY,
+                      "`Foo`@{FORCE_INDEX=Idx_SecondaryIndex}",
+                      "LastModified")
+                  + " AND `ShardId` IS NOT NULL"
+                  + String.format(SpannerTableTailer.POLL_QUERY_ORDER_BY, "LastModified"))
+          .bind("prevCommitTimestamp")
+          .to(Timestamp.MIN_VALUE)
+          .build();
+  public static final int SELECT_FOO_WITH_NOT_NULL_SHARDING_ROW_COUNT = 5;
+
   private static final com.google.spanner.v1.ResultSet COLUMNS_OPTIONS_FOO_RESULT =
       com.google.spanner.v1.ResultSet.newBuilder()
           .addRows(
@@ -570,6 +585,7 @@ public abstract class AbstractMockServerTest {
   private Spanner spanner;
   private Statement currentFooPollStatement;
   private Statement currentFooWithShardingPollStatement;
+  private Statement currentFooWithNotNullShardingPollStatement;
   private Statement currentBarPollStatement;
 
   @BeforeClass
@@ -654,6 +670,25 @@ public abstract class AbstractMockServerTest {
         StatementResult.query(SELECT_FOO_WITH_SHARDING_PER_DAY_STATEMENT, fooWithShardingResults),
         StatementResult.query(
             currentFooWithShardingPollStatement, new RandomResultSetGenerator(0).generate()));
+
+    // Poll Foo with NOT NULL sharding results.
+    ResultSet fooWithNotNullShardingResults =
+        new RandomResultSetGenerator(SELECT_FOO_WITH_NOT_NULL_SHARDING_ROW_COUNT).generate();
+    Timestamp maxFooWithNotNullShardingCommitTimestamp =
+        RandomResultSetGenerator.getMaxCommitTimestamp(fooWithNotNullShardingResults);
+    currentFooWithNotNullShardingPollStatement =
+        SELECT_FOO_WITH_NOT_NULL_SHARDING_STATEMENT
+            .toBuilder()
+            .bind("prevCommitTimestamp")
+            .to(maxFooWithNotNullShardingCommitTimestamp)
+            .build();
+    mockSpanner.putStatementResults(
+        StatementResult.query(
+            SELECT_FOO_WITH_NOT_NULL_SHARDING_STATEMENT, fooWithNotNullShardingResults),
+        StatementResult.query(
+            currentFooWithNotNullShardingPollStatement,
+            new RandomResultSetGenerator(0).generate()));
+
     // Poll Bar results.
     mockSpanner.putStatementResult(
         StatementResult.query(COLUMN_OPTIONS_BAR_STATEMENT, COLUMNS_OPTIONS_BAR_RESULT));

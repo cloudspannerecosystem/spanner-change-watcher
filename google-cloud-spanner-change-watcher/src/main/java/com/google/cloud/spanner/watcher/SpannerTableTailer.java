@@ -77,6 +77,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   public static class Builder {
     private final Spanner spanner;
     private final TableId table;
+    private String tableHint = "";
     private ShardProvider shardProvider;
     private CommitTimestampRepository commitTimestampRepository;
     private Duration pollInterval = Duration.ofSeconds(1L);
@@ -88,6 +89,15 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
       this.table = Preconditions.checkNotNull(table);
       this.commitTimestampRepository =
           SpannerCommitTimestampRepository.newBuilder(spanner, table.getDatabaseId()).build();
+    }
+
+    /**
+     * Sets an optional table hint to use for the poll query. This could for example be a
+     * `@{FORCE_INDEX=Idx_SecondaryIndex}` hint to force the usage of a specific secondary index.
+     */
+    public Builder setTableHint(String tableHint) {
+      this.tableHint = Preconditions.checkNotNull(tableHint);
+      return this;
     }
 
     /** Sets the {@link ShardProvider} that this {@link SpannerTableTailer} should use. */
@@ -153,6 +163,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   private ApiFuture<Void> currentPollFuture;
   private final DatabaseClient client;
   private final TableId table;
+  private final String tableHint;
   private final ShardProvider shardProvider;
   private final List<RowChangeCallback> callbacks = new LinkedList<>();
   private final CommitTimestampRepository commitTimestampRepository;
@@ -167,6 +178,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   private SpannerTableTailer(Builder builder) {
     this.client = builder.spanner.getDatabaseClient(builder.table.getDatabaseId());
     this.table = builder.table;
+    this.tableHint = Preconditions.checkNotNull(builder.tableHint);
     this.shardProvider = builder.shardProvider;
     this.commitTimestampRepository = builder.commitTimestampRepository;
     this.pollInterval = builder.pollInterval;
@@ -351,7 +363,8 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
       startedPollWithCommitTimestamp = lastSeenCommitTimestamp;
       Statement.Builder statementBuilder =
           Statement.newBuilder(
-              String.format(POLL_QUERY, table.getSqlIdentifier(), commitTimestampColumn));
+              String.format(
+                  POLL_QUERY, table.getSqlIdentifier() + tableHint, commitTimestampColumn));
       if (shardProvider != null) {
         shardProvider.appendShardFilter(statementBuilder);
       }
