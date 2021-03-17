@@ -28,6 +28,7 @@ import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.watcher.FixedShardProvider;
+import com.google.cloud.spanner.watcher.NotNullShardProvider;
 import com.google.cloud.spanner.watcher.SpannerCommitTimestampRepository;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
@@ -70,7 +71,7 @@ public class ITSpannerTableTailerTest {
             ImmutableList.of(
                 "CREATE TABLE NUMBERS (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE TABLE NUMBERS_WITH_SHARDS (ID INT64 NOT NULL, NAME STRING(100), SHARD_ID STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
-                "CREATE INDEX IDX_NUMBERS_SHARDS ON NUMBERS_WITH_SHARDS (SHARD_ID, LAST_MODIFIED DESC)"));
+                "CREATE NULL_FILTERED INDEX IDX_NUMBERS_SHARDS ON NUMBERS_WITH_SHARDS (SHARD_ID, LAST_MODIFIED DESC)"));
     logger.info(String.format("Created database %s", database.getId().toString()));
   }
 
@@ -701,6 +702,218 @@ public class ITSpannerTableTailerTest {
     for (SpannerTableTailer tailer : tailers) {
       tailer.awaitTerminated();
     }
+  }
+
+  @Test
+  public void testSpannerTailerWithNotNullShard() throws Exception {
+    final ImmutableList<String> shards = ImmutableList.of("EAST", "WEST");
+    Spanner spanner = env.getSpanner();
+    DatabaseClient client = spanner.getDatabaseClient(database.getId());
+    SpannerTableTailer tailer =
+        SpannerTableTailer.newBuilder(spanner, TableId.of(database.getId(), "NUMBERS_WITH_SHARDS"))
+            .setShardProvider(NotNullShardProvider.create("SHARD_ID"))
+            .setTableHint("@{FORCE_INDEX=IDX_NUMBERS_SHARDS}")
+            .setPollInterval(Duration.ofMillis(10L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            logger.info(
+                String.format(
+                    "Received changed for table %s: %s", table, row.asStruct().toString()));
+            receivedChanges.add(row.asStruct());
+            latch.countDown();
+          }
+        });
+    tailer.startAsync();
+    tailer.awaitRunning();
+
+    latch = new CountDownLatch(3);
+
+    Timestamp commitTs =
+        client.write(
+            Arrays.asList(
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_SHARDS")
+                    .set("ID")
+                    .to(1L)
+                    .set("NAME")
+                    .to("ONE")
+                    .set("SHARD_ID")
+                    .to(shards.get(0))
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_SHARDS")
+                    .set("ID")
+                    .to(2L)
+                    .set("NAME")
+                    .to("TWO")
+                    .set("SHARD_ID")
+                    .to(shards.get(1))
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_SHARDS")
+                    .set("ID")
+                    .to(3L)
+                    .set("NAME")
+                    .to("THREE")
+                    .set("SHARD_ID")
+                    .to(shards.get(0))
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build()));
+
+    List<Struct> inserts = drainChanges();
+    assertThat(inserts).hasSize(3);
+    assertThat(inserts)
+        .containsExactly(
+            Struct.newBuilder()
+                .set("ID")
+                .to(1L)
+                .set("NAME")
+                .to("ONE")
+                .set("SHARD_ID")
+                .to(shards.get(0))
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .build(),
+            Struct.newBuilder()
+                .set("ID")
+                .to(2L)
+                .set("NAME")
+                .to("TWO")
+                .set("SHARD_ID")
+                .to(shards.get(1))
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .build(),
+            Struct.newBuilder()
+                .set("ID")
+                .to(3L)
+                .set("NAME")
+                .to("THREE")
+                .set("SHARD_ID")
+                .to(shards.get(0))
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .build());
+
+    latch = new CountDownLatch(2);
+    commitTs =
+        client.write(
+            Arrays.asList(
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_SHARDS")
+                    .set("ID")
+                    .to(4L)
+                    .set("NAME")
+                    .to("FOUR")
+                    .set("SHARD_ID")
+                    .to(shards.get(1))
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_SHARDS")
+                    .set("ID")
+                    .to(5L)
+                    .set("NAME")
+                    .to("FIVE")
+                    .set("SHARD_ID")
+                    .to(shards.get(0))
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build()));
+
+    inserts = drainChanges();
+    assertThat(inserts).hasSize(2);
+    assertThat(inserts)
+        .containsExactly(
+            Struct.newBuilder()
+                .set("ID")
+                .to(4L)
+                .set("NAME")
+                .to("FOUR")
+                .set("SHARD_ID")
+                .to(shards.get(1))
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .build(),
+            Struct.newBuilder()
+                .set("ID")
+                .to(5L)
+                .set("NAME")
+                .to("FIVE")
+                .set("SHARD_ID")
+                .to(shards.get(0))
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .build());
+
+    latch = new CountDownLatch(2);
+    commitTs =
+        client.write(
+            Arrays.asList(
+                Mutation.newUpdateBuilder("NUMBERS_WITH_SHARDS")
+                    .set("ID")
+                    .to(1L)
+                    .set("NAME")
+                    .to("one")
+                    .set("SHARD_ID")
+                    .to(shards.get(0))
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newUpdateBuilder("NUMBERS_WITH_SHARDS")
+                    .set("ID")
+                    .to(5L)
+                    .set("NAME")
+                    .to("five")
+                    .set("SHARD_ID")
+                    .to(shards.get(0))
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build()));
+
+    List<Struct> updates = drainChanges();
+    assertThat(updates).hasSize(2);
+    assertThat(updates)
+        .containsExactly(
+            Struct.newBuilder()
+                .set("ID")
+                .to(1L)
+                .set("NAME")
+                .to("one")
+                .set("SHARD_ID")
+                .to(shards.get(0))
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .build(),
+            Struct.newBuilder()
+                .set("ID")
+                .to(5L)
+                .set("NAME")
+                .to("five")
+                .set("SHARD_ID")
+                .to(shards.get(0))
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .build());
+
+    // Verify that deletes are not picked up by the poller.
+    commitTs =
+        client.write(
+            Arrays.asList(
+                Mutation.delete("NUMBERS_WITH_SHARDS", Key.of(2L)),
+                Mutation.delete("NUMBERS_WITH_SHARDS", Key.of(3L))));
+    Thread.sleep(500L);
+    assertThat(receivedChanges).isEmpty();
+    tailer.stopAsync();
+    tailer.awaitTerminated();
   }
 
   private ImmutableList<Struct> drainChanges() throws Exception {
