@@ -22,10 +22,13 @@ import com.google.api.core.ApiFutures;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.AsyncRunner;
 import com.google.cloud.spanner.AsyncTransactionManager;
+import com.google.cloud.spanner.CommitResponse;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.ErrorCode;
 import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.Mutation.Op;
+import com.google.cloud.spanner.Options.TransactionOption;
+import com.google.cloud.spanner.Options.UpdateOption;
 import com.google.cloud.spanner.ReadContext;
 import com.google.cloud.spanner.ReadOnlyTransaction;
 import com.google.cloud.spanner.SpannerException;
@@ -83,6 +86,7 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
 
     private RandomUUIDChangeSetIdGenerator() {}
 
+    @Override
     public String generateChangeSetId() {
       return UUID.randomUUID().toString();
     }
@@ -95,6 +99,7 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
       this.changeSetId = idGenerator.generateChangeSetId();
     }
 
+    @Override
     public String getChangeSetId() {
       return changeSetId;
     }
@@ -108,6 +113,7 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
       this.runner = runner;
     }
 
+    @Override
     public <T> T run(TransactionCallable<T> callable) {
       return runner.run(
           new TransactionCallable<T>() {
@@ -119,10 +125,12 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
           });
     }
 
+    @Override
     public Timestamp getCommitTimestamp() {
       return runner.getCommitTimestamp();
     }
 
+    @Override
     public TransactionRunner allowNestedTransaction() {
       return runner.allowNestedTransaction();
     }
@@ -136,34 +144,41 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
       this.manager = manager;
     }
 
+    @Override
     public TransactionContext begin() {
       TransactionContext context = manager.begin();
       context.buffer(createChangeSetMutation(changeSetId));
       return context;
     }
 
+    @Override
     public void commit() {
       manager.commit();
     }
 
+    @Override
     public void rollback() {
       manager.rollback();
     }
 
+    @Override
     public TransactionContext resetForRetry() {
       TransactionContext context = manager.resetForRetry();
       context.buffer(createChangeSetMutation(changeSetId));
       return context;
     }
 
+    @Override
     public Timestamp getCommitTimestamp() {
       return manager.getCommitTimestamp();
     }
 
+    @Override
     public TransactionState getState() {
       return manager.getState();
     }
 
+    @Override
     public void close() {
       manager.close();
     }
@@ -190,6 +205,7 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
           executor);
     }
 
+    @Override
     public ApiFuture<Timestamp> getCommitTimestamp() {
       return runner.getCommitTimestamp();
     }
@@ -203,6 +219,7 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
       this.manager = manager;
     }
 
+    @Override
     public TransactionContextFuture beginAsync() {
       TransactionContextFuture context = manager.beginAsync();
       ApiFutures.addCallback(
@@ -220,10 +237,12 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
       return context;
     }
 
+    @Override
     public ApiFuture<Void> rollbackAsync() {
       return manager.rollbackAsync();
     }
 
+    @Override
     public TransactionContextFuture resetForRetryAsync() {
       TransactionContextFuture context = manager.resetForRetryAsync();
       ApiFutures.addCallback(
@@ -241,12 +260,19 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
       return context;
     }
 
+    @Override
     public TransactionState getState() {
       return manager.getState();
     }
 
+    @Override
     public void close() {
       manager.close();
+    }
+
+    @Override
+    public ApiFuture<Void> closeAsync() {
+      return manager.closeAsync();
     }
   }
 
@@ -427,8 +453,9 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
    *     });
    * </code></pre>
    */
-  public TransactionRunnerWithChangeSet readWriteTransaction() {
-    return new TransactionRunnerWithChangeSetImpl(client.readWriteTransaction());
+  @Override
+  public TransactionRunnerWithChangeSet readWriteTransaction(TransactionOption... options) {
+    return new TransactionRunnerWithChangeSetImpl(client.readWriteTransaction(options));
   }
 
   /**
@@ -462,8 +489,9 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
    * }
    * }</pre>
    */
-  public TransactionManagerWithChangeSet transactionManager() {
-    return new TransactionManagerWithChangeSetImpl(client.transactionManager());
+  @Override
+  public TransactionManagerWithChangeSet transactionManager(TransactionOption... options) {
+    return new TransactionManagerWithChangeSetImpl(client.transactionManager(options));
   }
 
   /**
@@ -500,8 +528,9 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
    *         executor);
    * </code></pre>
    */
-  public AsyncRunnerWithChangeSet runAsync() {
-    return new AsyncRunnerWithChangeSetImpl(client.runAsync());
+  @Override
+  public AsyncRunnerWithChangeSet runAsync(TransactionOption... options) {
+    return new AsyncRunnerWithChangeSetImpl(client.runAsync(options));
   }
 
   /**
@@ -549,35 +578,56 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
    * }
    * }</pre>
    */
-  public AsyncTransactionManagerWithChangeSet transactionManagerAsync() {
-    return new AsyncTransactionManagerWithChangeSetImpl(client.transactionManagerAsync());
+  @Override
+  public AsyncTransactionManagerWithChangeSet transactionManagerAsync(
+      TransactionOption... options) {
+    return new AsyncTransactionManagerWithChangeSetImpl(client.transactionManagerAsync(options));
   }
 
+  @Override
   public ReadContext singleUse() {
     return client.singleUse();
   }
 
+  @Override
   public ReadContext singleUse(TimestampBound bound) {
     return client.singleUse(bound);
   }
 
+  @Override
   public ReadOnlyTransaction singleUseReadOnlyTransaction() {
     return client.singleUseReadOnlyTransaction();
   }
 
+  @Override
   public ReadOnlyTransaction singleUseReadOnlyTransaction(TimestampBound bound) {
     return client.singleUseReadOnlyTransaction(bound);
   }
 
+  @Override
   public ReadOnlyTransaction readOnlyTransaction() {
     return client.readOnlyTransaction();
   }
 
+  @Override
   public ReadOnlyTransaction readOnlyTransaction(TimestampBound bound) {
     return client.readOnlyTransaction(bound);
   }
 
-  public long executePartitionedUpdate(Statement stmt) {
-    return client.executePartitionedUpdate(stmt);
+  @Override
+  public long executePartitionedUpdate(Statement stmt, UpdateOption... options) {
+    return client.executePartitionedUpdate(stmt, options);
+  }
+
+  @Override
+  public CommitResponse writeWithOptions(Iterable<Mutation> mutations, TransactionOption... options)
+      throws SpannerException {
+    return client.writeWithOptions(mutations, options);
+  }
+
+  @Override
+  public CommitResponse writeAtLeastOnceWithOptions(
+      Iterable<Mutation> mutations, TransactionOption... options) throws SpannerException {
+    return client.writeAtLeastOnceWithOptions(mutations, options);
   }
 }
