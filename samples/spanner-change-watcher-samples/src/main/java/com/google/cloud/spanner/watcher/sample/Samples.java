@@ -34,6 +34,7 @@ import com.google.cloud.spanner.watcher.CommitTimestampRepository;
 import com.google.cloud.spanner.watcher.DatabaseClientWithChangeSets;
 import com.google.cloud.spanner.watcher.DatabaseClientWithChangeSets.TransactionRunnerWithChangeSet;
 import com.google.cloud.spanner.watcher.FixedShardProvider;
+import com.google.cloud.spanner.watcher.NotNullShardProvider;
 import com.google.cloud.spanner.watcher.SpannerCommitTimestampRepository;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeSetPoller;
 import com.google.cloud.spanner.watcher.SpannerDatabaseChangeWatcher;
@@ -462,6 +463,80 @@ public class Samples {
     for (SpannerTableChangeWatcher watcher : watchers) {
       watcher.awaitTerminated();
     }
+  }
+
+  /**
+   * Watch a table that contains a sharding column that is set to a random non-null value when a row
+   * is inserted/updated. The value of the sharding column can be set to null at a later moment when
+   * the update of the row has been processed. This allows the shard and commit timestamp columns to
+   * be included in a null-filtered index that can be kept as small as possible. The {@link
+   * NotNullShardProvider} will append a <code>WHERE SHARD_ID IS NOT NULL</code> clause to the poll
+   * query.
+   *
+   * <p>The sample assumes that the given table has the following structure:
+   *
+   * <pre>{@code
+   * CREATE TABLE MY_TABLE (
+   *   ID            INT64,
+   *   NAME          STRING(MAX) NOT NULL,
+   *   LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+   *   PROCESSED     BOOL,
+   *   SHARD_ID      INT64 AS (CASE WHEN PROCESSED THEN NULL ELSE MOD(FARM_FINGERPRINT(NAME), 19) END) STORED,
+   * ) PRIMARY KEY (ID);
+   *
+   * CREATE NULL_FILTERED INDEX IDX_MY_TABLE_SHARD_ID ON MY_TABLE (SHARD_ID, LAST_MODIFIED DESC);
+   * }</pre>
+   *
+   * The above table and index definition are created in such a way that this sharding strategy can
+   * be added to an existing database without the need to change any existing application(s):
+   *
+   * <ol>
+   *   <li>The column PROCESSED is nullable.
+   *   <li>The column SHARD_ID is computed based on an existing column in the table.
+   *   <li>The index on the shard and commit timestamp column is null-filtered. If the shard value
+   *       is set to NULL, the row will be excluded from the index.
+   *   <li>Setting PROCESSED to TRUE will automatically set the SHARD_ID value to NULL and remove it
+   *       from the index. This can be done by a background process or Cloud Function that runs on
+   *       regular intervals.
+   * </ol>
+   */
+  public static void watchTableWithNotNullShardProviderExample(
+      String project, // "my-project"
+      String instance, // "my-instance"
+      String database, // "my-database"
+      String table, // "MY_TABLE"
+      String indexName // "IDX_MY_TABLE_SHARD_ID"
+      ) throws InterruptedException {
+    Spanner spanner = SpannerOptions.newBuilder().setProjectId(project).build().getService();
+    DatabaseId databaseId = DatabaseId.of(project, instance, database);
+    TableId tableId = TableId.of(databaseId, table);
+    final CountDownLatch latch = new CountDownLatch(3);
+
+    SpannerTableChangeWatcher watcher =
+        SpannerTableTailer.newBuilder(spanner, tableId)
+            .setShardProvider(NotNullShardProvider.create("SHARD_ID"))
+            // Force the poll query to use the secondary index.
+            .setTableHint(String.format("@{FORCE_INDEX=%s}", indexName))
+            .build();
+    watcher.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            System.out.printf(
+                "Received change for table %s: %s%n", table, row.asStruct().toString());
+            latch.countDown();
+          }
+        });
+    watcher.startAsync();
+    watcher.awaitRunning();
+    System.out.println("Started change watcher");
+
+    // Wait until we have received 3 changes.
+    latch.await();
+    System.out.println("Received 3 changes, stopping change watcher");
+    // Stop the poller and wait for it to release all resources.
+    watcher.stopAsync();
+    watcher.awaitTerminated();
   }
 
   /**

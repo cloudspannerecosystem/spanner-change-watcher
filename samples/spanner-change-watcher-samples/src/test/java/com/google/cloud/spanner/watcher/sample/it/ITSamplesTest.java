@@ -73,6 +73,8 @@ public class ITSamplesTest {
                 "CREATE TABLE NUMBERS2 (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE TABLE MY_TABLE (ID INT64, NAME STRING(MAX), SHARD_ID STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE INDEX IDX_MY_TABLE_SHARDING ON MY_TABLE (SHARD_ID, LAST_MODIFIED DESC)",
+                "CREATE TABLE MY_TABLE_NULLABLE_SHARD (ID INT64, NAME STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true), PROCESSED BOOL, SHARD_ID INT64 AS (CASE WHEN PROCESSED THEN NULL ELSE MOD(FARM_FINGERPRINT(NAME), 19) END) STORED) PRIMARY KEY (ID)",
+                "CREATE NULL_FILTERED INDEX IDX_MY_TABLE_NULLABLE_SHARDING ON MY_TABLE_NULLABLE_SHARD (SHARD_ID, LAST_MODIFIED DESC)",
                 "CREATE TABLE MULTIPLE_COMMIT_TS (ID INT64, NAME STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true), LAST_BATCH_JOB TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE TABLE NUMBERS_WITHOUT_COMMIT_TIMESTAMP (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP) PRIMARY KEY (ID)",
                 "CREATE TABLE CHANGE_SETS (CHANGE_SET_ID STRING(MAX), COMMIT_TIMESTAMP TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (CHANGE_SET_ID)",
@@ -570,6 +572,53 @@ public class ITSamplesTest {
     assertThat(res).contains("1, Name 1, WEST");
     assertThat(res).contains("2, Name 2, EAST");
     assertThat(res).contains("3, Name 3, WEST");
+  }
+
+  @Test
+  public void testWatchTableWithNotNullShardProviderExample() throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    Future<String> out =
+        runSample(
+            () -> {
+              Samples.watchTableWithNotNullShardProviderExample(
+                  databaseId.getInstanceId().getProject(),
+                  databaseId.getInstanceId().getInstance(),
+                  databaseId.getDatabase(),
+                  "MY_TABLE_NULLABLE_SHARD",
+                  "IDX_MY_TABLE_NULLABLE_SHARDING");
+            },
+            latch);
+    latch.await(120L, TimeUnit.SECONDS);
+    client.write(
+        ImmutableList.of(
+            Mutation.newInsertBuilder("MY_TABLE_NULLABLE_SHARD")
+                .set("ID")
+                .to(1L)
+                .set("NAME")
+                .to("Name 1")
+                .set("LAST_MODIFIED")
+                .to(Value.COMMIT_TIMESTAMP)
+                .build(),
+            Mutation.newInsertBuilder("MY_TABLE_NULLABLE_SHARD")
+                .set("ID")
+                .to(2L)
+                .set("NAME")
+                .to("Name 2")
+                .set("LAST_MODIFIED")
+                .to(Value.COMMIT_TIMESTAMP)
+                .build(),
+            Mutation.newInsertBuilder("MY_TABLE_NULLABLE_SHARD")
+                .set("ID")
+                .to(3L)
+                .set("NAME")
+                .to("Name 3")
+                .set("LAST_MODIFIED")
+                .to(Value.COMMIT_TIMESTAMP)
+                .build()));
+    String res = out.get(30L, TimeUnit.SECONDS);
+    assertThat(res).contains("1, Name 1");
+    assertThat(res).contains("2, Name 2");
+    assertThat(res).contains("3, Name 3");
   }
 
   @Test
