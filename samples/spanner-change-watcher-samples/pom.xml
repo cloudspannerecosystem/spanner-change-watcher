@@ -36,6 +36,11 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-api</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.github.pcj</groupId>
+      <artifactId>google-options</artifactId>
+      <version>1.0.0</version>
+    </dependency>
     
     <!-- Test dependency for integration test environment -->
     <dependency>
