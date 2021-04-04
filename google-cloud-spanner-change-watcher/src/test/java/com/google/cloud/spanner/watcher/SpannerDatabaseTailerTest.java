@@ -290,10 +290,7 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
                 .build()));
     mockSpanner.putStatementResult(
         StatementResult.query(
-            statement.toBuilder()
-            .bind("prevCommitTimestamp")
-            .to(ts)
-            .build(),
+            statement.toBuilder().bind("prevCommitTimestamp").to(ts).build(),
             new RandomResultSetGenerator(0).generate().toBuilder().setMetadata(metadata).build()));
 
     Spanner spanner = getSpanner();
