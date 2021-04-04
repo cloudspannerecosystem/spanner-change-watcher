@@ -273,7 +273,10 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
                 "SELECT *\n"
                     + "FROM `Foo`\n"
                     + "WHERE `AlternativeCommitTS`>@prevCommitTimestamp\n"
-                    + "ORDER BY `AlternativeCommitTS`")
+                    + "ORDER BY `AlternativeCommitTS`\n"
+                    + "LIMIT @limit")
+            .bind("limit")
+            .to(Long.MAX_VALUE)
             .bind("prevCommitTimestamp")
             .to(Timestamp.MIN_VALUE)
             .build();
@@ -287,7 +290,10 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
                 .build()));
     mockSpanner.putStatementResult(
         StatementResult.query(
-            statement.toBuilder().bind("prevCommitTimestamp").to(ts).build(),
+            statement.toBuilder()
+            .bind("prevCommitTimestamp")
+            .to(ts)
+            .build(),
             new RandomResultSetGenerator(0).generate().toBuilder().setMetadata(metadata).build()));
 
     Spanner spanner = getSpanner();
