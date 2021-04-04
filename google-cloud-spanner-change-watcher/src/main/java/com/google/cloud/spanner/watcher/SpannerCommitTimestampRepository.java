@@ -767,6 +767,9 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
   }
 
   static String shardValueToString(Type.Code type, Value shardValue) {
+    if (type == null) {
+      return null;
+    }
     switch (type) {
       case ARRAY:
         return arrayToString(shardValue);
