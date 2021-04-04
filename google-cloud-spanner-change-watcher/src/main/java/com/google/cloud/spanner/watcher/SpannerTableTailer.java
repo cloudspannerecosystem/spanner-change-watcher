@@ -70,14 +70,16 @@ import org.threeten.bp.Duration;
  */
 public class SpannerTableTailer extends AbstractApiService implements SpannerTableChangeWatcher {
   static final Logger logger = Logger.getLogger(SpannerTableTailer.class.getName());
+  static final long DEFAULT_LIMIT = Long.MAX_VALUE;
   static final String POLL_QUERY = "SELECT *\nFROM %s\nWHERE `%s`>@prevCommitTimestamp";
-  static final String POLL_QUERY_ORDER_BY = "\nORDER BY `%s`";
+  static final String POLL_QUERY_ORDER_BY = "\nORDER BY `%s`\nLIMIT @limit";
 
   /** Builder for a {@link SpannerTableTailer}. */
   public static class Builder {
     private final Spanner spanner;
     private final TableId table;
     private String tableHint = "";
+    private long limit = DEFAULT_LIMIT;
     private ShardProvider shardProvider;
     private CommitTimestampRepository commitTimestampRepository;
     private Duration pollInterval = Duration.ofSeconds(1L);
@@ -97,6 +99,21 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
      */
     public Builder setTableHint(String tableHint) {
       this.tableHint = Preconditions.checkNotNull(tableHint);
+      return this;
+    }
+
+    /**
+     * Sets the maximum number of changes to fetch for each poll query. Default is {@link
+     * Long#MAX_VALUE} which effectively means no limit. If <code>
+     * limit</code> number of changes are found during a poll, a new poll will be scheduled directly
+     * instead of after {@link #setPollInterval(Duration)}.
+     *
+     * <p>Setting this value can increase the efficiency of poll queries when a table receives a
+     * large number of writes. Each poll will request less rows from the backend and will be
+     * executed more often.
+     */
+    public Builder setLimit(int limit) {
+      this.limit = limit;
       return this;
     }
 
@@ -164,6 +181,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   private final DatabaseClient client;
   private final TableId table;
   private final String tableHint;
+  private final long limit;
   private final ShardProvider shardProvider;
   private final List<RowChangeCallback> callbacks = new LinkedList<>();
   private final CommitTimestampRepository commitTimestampRepository;
@@ -179,6 +197,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
     this.client = builder.spanner.getDatabaseClient(builder.table.getDatabaseId());
     this.table = builder.table;
     this.tableHint = Preconditions.checkNotNull(builder.tableHint);
+    this.limit = builder.limit;
     this.shardProvider = builder.shardProvider;
     this.commitTimestampRepository = builder.commitTimestampRepository;
     this.pollInterval = builder.pollInterval;
@@ -270,7 +289,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   }
 
   class SpannerTailerCallback implements ReadyCallback {
-    private void scheduleNextPollOrStop() {
+    private int mutationCount;
+
+    private void scheduleNextPollOrStop(boolean direct) {
       // Store the last seen commit timestamp in the repository to ensure that the poller will pick
       // up at the right timestamp again if it is stopped or fails.
       if (lastSeenCommitTimestamp.compareTo(startedPollWithCommitTimestamp) > 0) {
@@ -291,7 +312,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                   scheduled =
                       executor.schedule(
                           new SpannerTailerRunner(),
-                          pollInterval.toMillis(),
+                          direct ? 0 : pollInterval.toMillis(),
                           TimeUnit.MILLISECONDS);
                 }
               },
@@ -320,13 +341,13 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
         while (true) {
           synchronized (lock) {
             if (state() != State.RUNNING) {
-              scheduleNextPollOrStop();
+              scheduleNextPollOrStop(false);
               return CallbackResponse.DONE;
             }
           }
           switch (resultSet.tryNext()) {
             case DONE:
-              scheduleNextPollOrStop();
+              scheduleNextPollOrStop(mutationCount == limit);
               return CallbackResponse.DONE;
             case NOT_READY:
               return CallbackResponse.CONTINUE;
@@ -339,6 +360,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
               if (ts.compareTo(lastSeenCommitTimestamp) > 0) {
                 lastSeenCommitTimestamp = ts;
               }
+              mutationCount++;
               break;
           }
         }
@@ -347,7 +369,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
             LogRecordBuilder.of(
                 Level.WARNING, "Error processing change set for table {0}", table, t));
         notifyFailed(t);
-        scheduleNextPollOrStop();
+        scheduleNextPollOrStop(false);
         return CallbackResponse.DONE;
       }
     }
@@ -376,6 +398,8 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                   statementBuilder
                       .bind("prevCommitTimestamp")
                       .to(lastSeenCommitTimestamp)
+                      .bind("limit")
+                      .to(limit)
                       .build())) {
         currentPollFuture = rs.setCallback(executor, new SpannerTailerCallback());
       }
