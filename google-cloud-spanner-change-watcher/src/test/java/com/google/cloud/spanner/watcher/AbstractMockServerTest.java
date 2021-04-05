@@ -486,6 +486,8 @@ public abstract class AbstractMockServerTest {
                   "`Foo`",
                   "LastModified",
                   "LastModified"))
+          .bind("limit")
+          .to(Long.MAX_VALUE)
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
@@ -505,6 +507,8 @@ public abstract class AbstractMockServerTest {
                       60)
                   + ")"
                   + String.format(SpannerTableTailer.POLL_QUERY_ORDER_BY, "LastModified"))
+          .bind("limit")
+          .to(Long.MAX_VALUE)
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
@@ -518,6 +522,8 @@ public abstract class AbstractMockServerTest {
                       "LastModified")
                   + " AND `ShardId` IS NOT NULL"
                   + String.format(SpannerTableTailer.POLL_QUERY_ORDER_BY, "LastModified"))
+          .bind("limit")
+          .to(Long.MAX_VALUE)
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
@@ -551,6 +557,8 @@ public abstract class AbstractMockServerTest {
                   "`Bar`",
                   "LastModified",
                   "LastModified"))
+          .bind("limit")
+          .to(Long.MAX_VALUE)
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
