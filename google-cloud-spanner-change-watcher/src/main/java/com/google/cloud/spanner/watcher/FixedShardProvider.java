@@ -20,16 +20,18 @@ import com.google.cloud.ByteArray;
 import com.google.cloud.Date;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Statement.Builder;
-import com.google.cloud.spanner.Type;
 import com.google.cloud.spanner.Type.Code;
 import com.google.cloud.spanner.Value;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableSet;
+import java.math.BigDecimal;
 
 /**
  * Implementation of {@link ShardProvider} that returns a fixed shard id. This can be used in
  * combination with multiple change watchers, where each change watcher is responsible for watching
  * a specific segment of the table.
+ *
+ * <p>It can also be used to watch all segments of a table by setting the shard id to an array of
+ * all possible values in the shard column.
  *
  * <p>Example usage in combination with a {@link SpannerTableTailer}:
  *
@@ -68,6 +70,10 @@ public final class FixedShardProvider implements ShardProvider {
     return new FixedShardProvider(column, Value.int64(value));
   }
 
+  public static FixedShardProvider create(String column, BigDecimal value) {
+    return new FixedShardProvider(column, Value.numeric(value));
+  }
+
   public static FixedShardProvider create(String column, String value) {
     return new FixedShardProvider(column, Value.string(value));
   }
@@ -80,16 +86,16 @@ public final class FixedShardProvider implements ShardProvider {
     return new FixedShardProvider(column, value);
   }
 
-  private static final ImmutableSet<Type.Code> SUPPORTED_TYPES =
-      ImmutableSet.of(
-          Code.BOOL, Code.BYTES, Code.DATE, Code.FLOAT64, Code.INT64, Code.STRING, Code.TIMESTAMP);
-
   private FixedShardProvider(String column, Value value) {
     Preconditions.checkNotNull(column);
     Preconditions.checkNotNull(value);
-    Preconditions.checkArgument(SUPPORTED_TYPES.contains(value.getType().getCode()));
     this.value = value;
-    this.sqlAppendment = String.format(" AND `%s`=@shard", column);
+    if (value.getType().getCode() == Code.ARRAY) {
+      this.sqlAppendment =
+          String.format(" AND `%s` IS NOT NULL AND `%s` IN UNNEST(@shard)", column, column);
+    } else {
+      this.sqlAppendment = String.format(" AND `%s`=@shard", column);
+    }
   }
 
   @Override

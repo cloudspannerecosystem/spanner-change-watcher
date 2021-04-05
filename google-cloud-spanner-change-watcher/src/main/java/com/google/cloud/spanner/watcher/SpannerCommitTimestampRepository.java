@@ -35,12 +35,15 @@ import com.google.cloud.spanner.Type.Code;
 import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
 import com.google.spanner.admin.database.v1.UpdateDatabaseDdlMetadata;
+import java.nio.charset.Charset;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -69,6 +72,7 @@ import javax.annotation.Nullable;
 public class SpannerCommitTimestampRepository implements CommitTimestampRepository {
   private static final Logger logger =
       Logger.getLogger(SpannerCommitTimestampRepository.class.getName());
+  private static final Charset UTF8 = Charset.forName("UTF8");
 
   static final String DEFAULT_TABLE_CATALOG = "";
   static final String DEFAULT_TABLE_SCHEMA = "";
@@ -704,7 +708,7 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
                     t == Code.DATE ? shardValue.getDate() : null,
                     t == Code.FLOAT64 ? shardValue.getFloat64() : null,
                     t == Code.INT64 ? shardValue.getInt64() : null,
-                    t == Code.STRING ? shardValue.getString() : null,
+                    shardValueToString(t, shardValue),
                     t == Code.TIMESTAMP ? shardValue.getTimestamp() : null),
                 tsColumns);
     if (row == null) {
@@ -754,11 +758,79 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
                 .set(shardIdInt64Col)
                 .to(t == Code.INT64 ? shardValue.getInt64() : null)
                 .set(shardIdStringCol)
-                .to(t == Code.STRING ? shardValue.getString() : null)
+                .to(shardValueToString(t, shardValue))
                 .set(shardIdTimestampCol)
                 .to(t == Code.TIMESTAMP ? shardValue.getTimestamp() : null)
                 .set(tsCol)
                 .to(commitTimestamp)
                 .build()));
+  }
+
+  static String shardValueToString(Type.Code type, Value shardValue) {
+    if (type == null) {
+      return null;
+    }
+    switch (type) {
+      case ARRAY:
+        return arrayToString(shardValue);
+      case NUMERIC:
+        return shardValue.getNumeric().toString();
+      case STRING:
+        return shardValue.getString();
+
+        // The following types have their own specific columns.
+      case BOOL:
+      case BYTES:
+      case DATE:
+      case FLOAT64:
+      case INT64:
+      case STRUCT:
+      case TIMESTAMP:
+      default:
+        return null;
+    }
+  }
+
+  static String arrayToString(Value value) {
+    Preconditions.checkNotNull(value);
+    Preconditions.checkArgument(value.getType().getCode() == Type.Code.ARRAY);
+    switch (value.getType().getArrayElementType().getCode()) {
+      case BOOL:
+        return value.getBoolArray().stream()
+            .map(b -> b.toString())
+            .collect(Collectors.joining(","));
+      case BYTES:
+        return value.getBytesArray().stream()
+            .map(b -> b.toBase64())
+            .collect(Collectors.joining(","));
+      case DATE:
+        return value.getDateArray().stream()
+            .map(b -> b.toString())
+            .collect(Collectors.joining(","));
+      case FLOAT64:
+        return value.getFloat64Array().stream()
+            .map(b -> b.toString())
+            .collect(Collectors.joining(","));
+      case INT64:
+        return value.getInt64Array().stream()
+            .map(b -> b.toString())
+            .collect(Collectors.joining(","));
+      case NUMERIC:
+        return value.getNumericArray().stream()
+            .map(b -> b.toString())
+            .collect(Collectors.joining(","));
+      case STRING:
+        return value.getStringArray().stream()
+            .map(b -> Base64.getEncoder().encodeToString(b.getBytes(UTF8)))
+            .collect(Collectors.joining(","));
+      case TIMESTAMP:
+        return value.getTimestampArray().stream()
+            .map(b -> b.toString())
+            .collect(Collectors.joining(","));
+      case ARRAY:
+      case STRUCT:
+      default:
+        return null;
+    }
   }
 }
