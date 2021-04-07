@@ -43,4 +43,10 @@ public interface ShardProvider {
    */
   @Nullable
   Value getShardValue();
+
+  /** Returns the name of the column that this shard provider uses. */
+  @Nullable
+  default String getColumnName() {
+    return null;
+  }
 }

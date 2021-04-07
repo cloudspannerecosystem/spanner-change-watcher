@@ -56,6 +56,11 @@ public class Updater {
     final int mutationsPerTx = options.mutationsPerTransaction;
     final int tps = options.writeTransactionsPerSecond;
     final int sleepIntervalMs = (1000 / tps) * threads;
+
+    System.out.printf(
+        "Starting updater with %d threads executing %d transactions per second with %d mutations per transaction\n",
+        threads, tps, mutationsPerTx);
+
     ExecutorService executor = Executors.newFixedThreadPool(threads);
     for (int i = 0; i < threads; i++) {
       executor.submit(new UpdateRunnable(mutationsPerTx, options.table, range, sleepIntervalMs));
@@ -79,6 +84,12 @@ public class Updater {
     public void run() {
       final Random rnd = new Random();
       while (true) {
+        try {
+          Thread.sleep(rnd.nextInt(sleepIntervalMs * 2));
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          return;
+        }
         int numMutations = rnd.nextInt(numMutationsPerTransaction * 2) + 1;
         List<Mutation> mutations = new ArrayList<Mutation>(numMutations);
         for (int i = 0; i < numMutations; i++) {
@@ -87,12 +98,6 @@ public class Updater {
         client.write(mutations);
         totalTransactions.incrementAndGet();
         totalMutations.addAndGet(numMutations);
-        try {
-          Thread.sleep(rnd.nextInt(sleepIntervalMs * 2));
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          return;
-        }
       }
     }
   }

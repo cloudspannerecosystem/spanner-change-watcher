@@ -49,9 +49,6 @@ import java.util.concurrent.ExecutionException;
  */
 public class Main {
   public static class BenchmarkOptions extends OptionsBase {
-    @Option(name = "help", abbrev = 'h', help = "Prints usage info.", defaultValue = "true")
-    public boolean help;
-
     @Option(
         name = "instance",
         abbrev = 'i',
@@ -77,8 +74,8 @@ public class Main {
         name = "index",
         abbrev = 'x',
         help =
-            "The name of the secondary index to define on the table and to use for the poll query. Defaults to Idx_Singers_ShardId_LastModified.",
-        defaultValue = "Idx_Singers_ShardId_LastModified")
+            "The name of the secondary index to define on the table and to use for the poll query. Defaults to Idx_Singers_ShardId_LastUpdated. Set to an empty string to disable using a secondary index. This will have a negative impact on the performance of the poll query if the table contains a large number of rows.",
+        defaultValue = "Idx_Singers_ShardId_LastUpdated")
     public String index;
 
     @Option(
@@ -98,7 +95,7 @@ public class Main {
 
     @Option(
         name = "updateParallelism",
-        abbrev = 'p',
+        abbrev = 'u',
         help = "The number of parallel threads to use to execute write transactions.",
         defaultValue = "32")
     public int updateParallelism;
@@ -107,36 +104,50 @@ public class Main {
         name = "numWatchers",
         abbrev = 'n',
         help =
-            "The number of watchers to start. The available shards will be evenly distributed among the watchers",
+            "The number of watchers to start. The available shards will be evenly distributed among the watchers.",
         defaultValue = "1")
     public int numWatchers;
 
     @Option(
+        name = "disableShardProvider",
+        help =
+            "Disables the use of a shard provider. This will make the poll query significantly less efficient for large tables. Set this option to true to compare the performance with/without a shard provider. This option can only be used with numWatchers=1.",
+        defaultValue = "false")
+    public boolean disableSharding;
+
+    @Option(
+        name = "pollInterval",
+        abbrev = 'p',
+        help =
+            "The poll interval to use for the watchers. Defaults to 1 second (PT1S). Duration should be specified in ISO-8601 duration format (PnDTnHnMn.nS).",
+        defaultValue = "PT1S")
+    public String pollInterval;
+
+    @Option(
         name = "limit",
         abbrev = 'l',
-        help =
-            "The maximum number of changes that a watcher should fetch during a poll. A zero or negative value means no limit.",
-        defaultValue = "0")
+        help = "The maximum number of changes that a watcher should fetch during a poll.",
+        defaultValue = "10000")
     public long limit;
+
+    @Option(
+        name = "fallbackToWithQuery",
+        abbrev = 'f',
+        help = "The number of seconds poll latency that should trigger a switch to a WITH query.",
+        defaultValue = "60")
+    public int fallbackToWithQuery;
+
+    @Option(
+        name = "simple",
+        abbrev = 's',
+        help =
+            "Print single line status without colors. Use this if your console does not support control characters.",
+        defaultValue = "false")
+    public boolean simpleStatus;
   }
 
   /**
-   * Main method for the sample application. Supports the following arguments:
-   *
-   * <ul>
-   *   <li>-i, --instance: (Required) The name of the Cloud Spanner instance to use.
-   *   <li>-d, --database: (Required) The name of the Cloud Spanner database to use.
-   *   <li>-t, --table: The name of the table to update and watch. Defaults to Singers.
-   *   <li>-w, --writeTransactionPerSecond: The number of write transactions per second that the
-   *       updater should execute. Defaults to 1.
-   *   <li>-m, --mutationsPerTransaction: The number of mutations that each transaction should
-   *       contain on average. The number of mutations per second is equal to tps * mpt.
-   *   <li>-p, --updateParallelism: The number of threads to use for the updater. Defaults to 32.
-   *   <li>-n, --numWatchers: The number of watchers that should be started. Defaults to 1. The
-   *       available shards will be evenly distributed over the watchers.
-   *   <li>-l, --limit: The maximum number of changes that a watcher should fetch during a poll.
-   *       Defaults to no limit.
-   * </ul>
+   * Main method for the sample application. See {@link BenchmarkOptions} for supported arguments.
    */
   public static void main(String[] args) {
     OptionsParser parser = OptionsParser.newOptionsParser(BenchmarkOptions.class);
@@ -148,11 +159,21 @@ public class Main {
         || options.writeTransactionsPerSecond < 1
         || options.mutationsPerTransaction < 1
         || options.updateParallelism < 1
-        || options.numWatchers < 1) {
+        || options.numWatchers < 1
+        || options.limit <= 0L
+        || options.fallbackToWithQuery <= 0) {
       printUsage(parser);
       return;
     }
-    
+    if (options.disableSharding && options.numWatchers == 1) {
+      throw new IllegalArgumentException(
+          "disableSharding=true can only be used in combination with numWatchers=1");
+    }
+    // Fallback to simple status output when there's no supported console available.
+    if (System.console() == null || System.getenv().get("TERM") == null) {
+      options.simpleStatus = true;
+    }
+
     // Create table and index if any of these do not already exist.
     try {
       createTableAndIndexIfNotExists(options);
@@ -177,12 +198,15 @@ public class Main {
     }
   }
 
+  /** The example table that is used by this benchmark application. */
   private static final String TABLE_DDL =
       "CREATE TABLE `%s` (\n"
           + "  SingerId     INT64 NOT NULL,\n"
           + "  FirstName    STRING(200),\n"
           + "  LastName     STRING(200) NOT NULL,\n"
-          + "  LastModified TIMESTAMP OPTIONS (allow_commit_timestamp=true),\n"
+          + "  BirthDate    DATE,\n"
+          + "  Picture      BYTES(MAX),\n"
+          + "  LastUpdated  TIMESTAMP OPTIONS (allow_commit_timestamp=true),\n"
           + "  Processed    BOOL,\n"
           + "  ShardId      INT64 AS (\n"
           + "    CASE\n"
@@ -191,8 +215,9 @@ public class Main {
           + "    END) STORED,\n"
           + ") PRIMARY KEY (SingerId)";
 
+  /** The example index that is used by this benchmark application. */
   private static final String INDEX_DDL =
-      "CREATE NULL_FILTERED INDEX `%s`\n" + "  ON `%s` (ShardId, LastModified)";
+      "CREATE NULL_FILTERED INDEX `%s`\n" + "  ON `%s` (ShardId, LastUpdated)";
 
   private static void createTableAndIndexIfNotExists(BenchmarkOptions options)
       throws InterruptedException, ExecutionException {
@@ -219,22 +244,24 @@ public class Main {
           System.out.printf("Table `%s` found.\n", options.table);
         }
       }
-      try (ResultSet rs =
-          client
-              .singleUse()
-              .executeQuery(
-                  Statement.newBuilder(
-                          "SELECT 1 FROM INFORMATION_SCHEMA.INDEXES WHERE INDEX_NAME=@indexName AND TABLE_NAME=@tableName")
-                      .bind("indexName")
-                      .to(options.index)
-                      .bind("tableName")
-                      .to(options.table)
-                      .build())) {
-        if (!rs.next()) {
-          System.out.printf("Index `%s` not found and needs to be created.\n", options.index);
-          statements.add(String.format(INDEX_DDL, options.index, options.table));
-        } else {
-          System.out.printf("Index `%s` found.\n", options.index);
+      if (!Strings.isNullOrEmpty(options.index)) {
+        try (ResultSet rs =
+            client
+                .singleUse()
+                .executeQuery(
+                    Statement.newBuilder(
+                            "SELECT 1 FROM INFORMATION_SCHEMA.INDEXES WHERE INDEX_NAME=@indexName AND TABLE_NAME=@tableName")
+                        .bind("indexName")
+                        .to(options.index)
+                        .bind("tableName")
+                        .to(options.table)
+                        .build())) {
+          if (!rs.next()) {
+            System.out.printf("Index `%s` not found and needs to be created.\n", options.index);
+            statements.add(String.format(INDEX_DDL, options.index, options.table));
+          } else {
+            System.out.printf("Index `%s` found.\n", options.index);
+          }
         }
       }
       if (!statements.isEmpty()) {

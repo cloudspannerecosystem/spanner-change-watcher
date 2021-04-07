@@ -26,6 +26,8 @@ import com.google.cloud.spanner.AsyncResultSet.ReadyCallback;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.Statement;
+import com.google.cloud.spanner.Type.Code;
+import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import com.google.cloud.spanner.watcher.SpannerUtils.LogRecordBuilder;
 import com.google.common.base.Preconditions;
@@ -34,12 +36,15 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import org.threeten.bp.Duration;
 
 /**
@@ -70,7 +75,10 @@ import org.threeten.bp.Duration;
  */
 public class SpannerTableTailer extends AbstractApiService implements SpannerTableChangeWatcher {
   static final Logger logger = Logger.getLogger(SpannerTableTailer.class.getName());
-  static final long DEFAULT_LIMIT = Long.MAX_VALUE;
+  static final long MAX_WITH_QUERY_LIMIT = 100_000L;
+  static final int MAX_WITH_QUERY_SHARD_VALUES = 100;
+  static final int DEFAULT_FALLBACK_TO_WITH_QUERY_SECONDS = 60;
+  static final long DEFAULT_LIMIT = 10_000L;
   static final String POLL_QUERY = "SELECT *\nFROM %s\nWHERE `%s`>@prevCommitTimestamp";
   static final String POLL_QUERY_ORDER_BY = "\nORDER BY `%s`\nLIMIT @limit";
 
@@ -80,6 +88,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
     private final TableId table;
     private String tableHint = "";
     private long limit = DEFAULT_LIMIT;
+    private int fallbackToWithQuerySeconds = DEFAULT_FALLBACK_TO_WITH_QUERY_SECONDS;
     private ShardProvider shardProvider;
     private CommitTimestampRepository commitTimestampRepository;
     private Duration pollInterval = Duration.ofSeconds(1L);
@@ -103,17 +112,48 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
     }
 
     /**
-     * Sets the maximum number of changes to fetch for each poll query. Default is {@link
-     * Long#MAX_VALUE} which effectively means no limit. If <code>
+     * Sets the maximum number of changes to fetch for each poll query. Default is 10,000. If <code>
      * limit</code> number of changes are found during a poll, a new poll will be scheduled directly
      * instead of after {@link #setPollInterval(Duration)}.
      *
-     * <p>Setting this value can increase the efficiency of poll queries when a table receives a
-     * large number of writes. Each poll will request less rows from the backend and will be
-     * executed more often.
+     * <p>Setting this limit to a lower value instructs the {@link SpannerTableTailer} to execute
+     * more poll queries more quickly if it is not able to keep up with the modifications in the
+     * table that it is watching. Setting it too low can limit the overall throughput of the {@link
+     * SpannerTableTailer} as it cannot fetch enough rows in each poll.
+     *
+     * <p>Recommended values are between 1,000 and 10,000.
      */
-    public Builder setLimit(int limit) {
+    public Builder setLimit(long limit) {
       this.limit = limit;
+      return this;
+    }
+
+    /**
+     * A {@link SpannerTableTailer} that uses a {@link FixedShardProvider} with an array of values
+     * will by default execute a simple poll query that looks like this:
+     *
+     * <pre>{@code
+     * SELECT *
+     * FROM Table
+     * WHERE LastModified > @lastSeenCommitTimestamp AND ShardId IS NOT NULL AND ShardId IN UNNEST(@shardIds)
+     * ORDER BY LastModified
+     * LIMIT @limit
+     * }</pre>
+     *
+     * <p>In some specific cases these queries can also automatically be re-written to a query that
+     * creates a WITH clause for each shard id. This can be more efficient, especially if there are
+     * many old mutations that have not yet been reported by the {@link SpannerTableTailer}. Using
+     * such a query comes with the expense of a higher memory footprint on Cloud Spanner. This query
+     * is therefore only used if the {@link SpannerTableTailer} is more than 60 seconds behind. This
+     * default limit of 60 seconds can be increased or decreased with this setting.
+     *
+     * <p>Recommended values are between 10 seconds and 24 hours. Setting the limit to multiple
+     * hours means that the WITH query should only be used when the {@link SpannerTableTailer} is
+     * started after having been stopped for a while, while modifications to the watched table
+     * continued to be applied.
+     */
+    public Builder setFallbackToWithQuerySeconds(int seconds) {
+      this.fallbackToWithQuerySeconds = seconds;
       return this;
     }
 
@@ -178,10 +218,12 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   private final Object lock = new Object();
   private ScheduledFuture<?> scheduled;
   private ApiFuture<Void> currentPollFuture;
+  private Statement lastPollStatement;
   private final DatabaseClient client;
   private final TableId table;
   private final String tableHint;
   private final long limit;
+  private final int fallbackToWithQuerySeconds;
   private final ShardProvider shardProvider;
   private final List<RowChangeCallback> callbacks = new LinkedList<>();
   private final CommitTimestampRepository commitTimestampRepository;
@@ -192,12 +234,14 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   private Timestamp lastSeenCommitTimestamp;
 
   private String commitTimestampColumn;
+  private WithPollQueryBuilder withPollQueryBuilder;
 
   private SpannerTableTailer(Builder builder) {
     this.client = builder.spanner.getDatabaseClient(builder.table.getDatabaseId());
     this.table = builder.table;
     this.tableHint = Preconditions.checkNotNull(builder.tableHint);
     this.limit = builder.limit;
+    this.fallbackToWithQuerySeconds = builder.fallbackToWithQuerySeconds;
     this.shardProvider = builder.shardProvider;
     this.commitTimestampRepository = builder.commitTimestampRepository;
     this.pollInterval = builder.pollInterval;
@@ -227,6 +271,16 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
     return table;
   }
 
+  /**
+   * Returns the last poll statement of this tailer. This can be used to monitor the polling
+   * activity by querying the SPANNER_SYS views for query statistics for this statement.
+   */
+  public Statement getLastPollStatement() {
+    synchronized (lock) {
+      return lastPollStatement;
+    }
+  }
+
   @Override
   protected void doStart() {
     logger.log(Level.INFO, "Starting watcher for table {0}", table);
@@ -250,6 +304,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                     commitTimestampRepository.get(table, shardProvider.getShardValue());
               }
               commitTimestampColumn = Futures.getUnchecked(commitTimestampColFut);
+              if (canUseWithQuery()) {
+                withPollQueryBuilder = new WithPollQueryBuilder();
+              }
               logger.log(Level.INFO, "Watcher started for table {0}", table);
               notifyStarted();
               scheduled = executor.schedule(new SpannerTailerRunner(), 0L, TimeUnit.MILLISECONDS);
@@ -383,26 +440,235 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
           String.format(
               "Starting poll for commit timestamp %s", lastSeenCommitTimestamp.toString()));
       startedPollWithCommitTimestamp = lastSeenCommitTimestamp;
-      Statement.Builder statementBuilder =
-          Statement.newBuilder(
-              String.format(
-                  POLL_QUERY, table.getSqlIdentifier() + tableHint, commitTimestampColumn));
-      if (shardProvider != null) {
-        shardProvider.appendShardFilter(statementBuilder);
+      Statement.Builder statementBuilder;
+      if (withPollQueryBuilder != null
+          && (Timestamp.now().getSeconds() - lastSeenCommitTimestamp.getSeconds())
+              > fallbackToWithQuerySeconds) {
+        statementBuilder = withPollQueryBuilder.withPollQuery;
+      } else {
+        statementBuilder =
+            Statement.newBuilder(
+                String.format(
+                    POLL_QUERY, table.getSqlIdentifier() + tableHint, commitTimestampColumn));
+        if (shardProvider != null) {
+          shardProvider.appendShardFilter(statementBuilder);
+        }
+        statementBuilder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
       }
-      statementBuilder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
-      try (AsyncResultSet rs =
-          client
-              .singleUse()
-              .executeQueryAsync(
-                  statementBuilder
-                      .bind("prevCommitTimestamp")
-                      .to(lastSeenCommitTimestamp)
-                      .bind("limit")
-                      .to(limit)
-                      .build())) {
+      Statement statement =
+          statementBuilder
+              .bind("prevCommitTimestamp")
+              .to(lastSeenCommitTimestamp)
+              .bind("limit")
+              .to(limit)
+              .build();
+      synchronized (lock) {
+        lastPollStatement = statement;
+      }
+      try (AsyncResultSet rs = client.singleUse().executeQueryAsync(statement)) {
         currentPollFuture = rs.setCallback(executor, new SpannerTailerCallback());
       }
+    }
+  }
+
+  /**
+   * Returns true if this {@link SpannerTableTailer} can use a WITH query that creates a separate
+   * SELECT statement for each shard that the tailer is watching.
+   *
+   * <p>A {@link SpannerTableTailer} can use a WITH query if it meets the following conditions:
+   *
+   * <ol>
+   *   <li>It uses a {@link ShardProvider} that has a column name and an array as its (fixed) value.
+   *   <li>The list of distinct shard values does not exceed 100.
+   *   <li>It has a LIMIT value less than or equal to 10,000.
+   * </ol>
+   */
+  boolean canUseWithQuery() {
+    if (limit > MAX_WITH_QUERY_LIMIT) {
+      return false;
+    }
+    if (shardProvider == null) {
+      return false;
+    }
+    if (shardProvider.getColumnName() == null) {
+      return false;
+    }
+    Value value = shardProvider.getShardValue();
+    if (value == null) {
+      return false;
+    }
+    if (value.getType().getCode() != Code.ARRAY) {
+      return false;
+    }
+    List<ShardProvider> providers = splitArrayValueShardProvider(shardProvider);
+    if (providers.size() > MAX_WITH_QUERY_SHARD_VALUES) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * {@link WithPollQueryBuilder} generates a WITH query that creates a separate SELECT statement
+   * for each shard that the tailer is watching. Each SELECT statement will be held in memory by
+   * Spanner. The SELECT statements in the WITH clauses therefore only contain the primary key and
+   * commit timestamp values to keep the memory footprint as small as possible. An additional WITH
+   * clause is added that contains the union of all the separate shards. The final query then
+   * selects the union of all shards and joins this with the actual table.
+   *
+   * <p>Example:
+   *
+   * <pre>{@code
+   * WITH
+   * S0 AS (
+   *   SELECT `SingerId`, `LastUpdated`
+   *   FROM `Singers`@{FORCE_INDEX=`Idx_Singers_ShardId_LastUpdated`}
+   *   WHERE `LastUpdated`>@lastSeenCommitTimestamp AND `ShardId`=@shard0
+   *   ORDER BY `LastUpdated`
+   *   LIMIT @limit
+   * ),
+   * S1 AS (
+   *   SELECT `SingerId`, `LastUpdated`
+   *   FROM `Singers`@{FORCE_INDEX=`Idx_Singers_ShardId_LastUpdated`}
+   *   WHERE `LastUpdated`>@lastSeenCommitTimestamp AND `ShardId`=@shard1
+   *   ORDER BY `LastUpdated`
+   *   LIMIT @limit
+   * ),
+   * S2 AS (
+   *   SELECT `SingerId`, `LastUpdated`
+   *   FROM `Singers`@{FORCE_INDEX=`Idx_Singers_ShardId_LastUpdated`}
+   *   WHERE `LastUpdated`>@lastSeenCommitTimestamp AND `ShardId`=@shard2
+   *   ORDER BY `LastUpdated`
+   *   LIMIT @limit
+   * ),
+   * AllShards AS (
+   *   SELECT `SingerId`, FROM (
+   *     SELECT *
+   *     FROM S0
+   *     UNION ALL
+   *     SELECT *
+   *     FROM S1
+   *     UNION ALL
+   *     SELECT *
+   *     FROM S2
+   *   )
+   *   ORDER BY `LastUpdated`
+   *   LIMIT @limit
+   * )
+   * SELECT `Singers`.*
+   * FROM AllShards
+   * INNER JOIN `Singers` ON `Singers`.`SingerId`=AllShards.`SingerId`
+   * ORDER BY `LastUpdated`
+   * LIMIT @limit
+   * }</pre>
+   */
+  class WithPollQueryBuilder {
+    private final List<String> primaryKeyColumns;
+    final Statement.Builder withPollQuery;
+
+    WithPollQueryBuilder() throws ExecutionException, InterruptedException {
+      primaryKeyColumns = SpannerUtils.getPrimaryKeyColumns(client, table).get();
+      withPollQuery = generateWithPollQuery();
+    }
+
+    private Statement.Builder generateWithPollQuery() {
+      List<ShardProvider> providers = splitArrayValueShardProvider(shardProvider);
+      Statement.Builder builder = Statement.newBuilder("WITH\n");
+      int index = 0;
+      for (ShardProvider provider : providers) {
+        builder.append("S").append(String.valueOf(index)).append(" AS (\n");
+        builder.append("SELECT ");
+        for (String pk : primaryKeyColumns) {
+          builder.append(String.format("`%s`, ", pk));
+        }
+        builder.append(String.format("`%s`", commitTimestampColumn)).append("\n");
+        builder.append("FROM ").append(table.getSqlIdentifier()).append(tableHint).append("\n");
+        builder.append(String.format("WHERE `%s`>@prevCommitTimestamp", commitTimestampColumn));
+        provider.appendShardFilter(builder);
+        builder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
+        builder.append("\n),");
+        index++;
+      }
+
+      builder.append("AllShards AS (\n");
+      builder.append("SELECT ");
+      for (String pk : primaryKeyColumns) {
+        builder.append(String.format("`%s`, ", pk));
+      }
+      builder.append("FROM (\n");
+      for (index = 0; index < providers.size(); index++) {
+        if (index > 0) {
+          builder.append("UNION ALL\n");
+        }
+        builder.append("SELECT *\n").append("FROM S").append(String.valueOf(index)).append("\n");
+      }
+      builder.append(")");
+      builder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
+      builder.append("\n)\n");
+      builder.append(String.format("SELECT %s.*\nFROM AllShards\n", table.getSqlIdentifier()));
+      builder.append("INNER JOIN ").append(table.getSqlIdentifier());
+      builder.append(" ON ");
+      index = 0;
+      for (String pk : primaryKeyColumns) {
+        if (index > 0) {
+          builder.append(" AND ");
+        }
+        builder.append(String.format("%s.`%s`=AllShards.`%s`", table.getSqlIdentifier(), pk, pk));
+      }
+      builder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
+
+      return builder;
+    }
+  }
+
+  static List<ShardProvider> splitArrayValueShardProvider(ShardProvider shardProvider) {
+    Value value = shardProvider.getShardValue();
+    String column = shardProvider.getColumnName();
+    Supplier<String> paramNameSupplier =
+        new Supplier<String>() {
+          int index = 0;
+
+          @Override
+          public String get() {
+            return "param" + (index++);
+          }
+        };
+    switch (value.getType().getArrayElementType().getCode()) {
+      case BOOL:
+        return value.getBoolArray().stream()
+            .map(b -> new FixedShardProvider(column, Value.bool(b), paramNameSupplier.get()))
+            .collect(Collectors.toList());
+      case BYTES:
+        return value.getBytesArray().stream()
+            .map(b -> new FixedShardProvider(column, Value.bytes(b), paramNameSupplier.get()))
+            .collect(Collectors.toList());
+      case DATE:
+        return value.getDateArray().stream()
+            .map(b -> new FixedShardProvider(column, Value.date(b), paramNameSupplier.get()))
+            .collect(Collectors.toList());
+      case FLOAT64:
+        return value.getFloat64Array().stream()
+            .map(b -> new FixedShardProvider(column, Value.float64(b), paramNameSupplier.get()))
+            .collect(Collectors.toList());
+      case INT64:
+        return value.getInt64Array().stream()
+            .map(b -> new FixedShardProvider(column, Value.int64(b), paramNameSupplier.get()))
+            .collect(Collectors.toList());
+      case NUMERIC:
+        return value.getNumericArray().stream()
+            .map(b -> new FixedShardProvider(column, Value.numeric(b), paramNameSupplier.get()))
+            .collect(Collectors.toList());
+      case STRING:
+        return value.getStringArray().stream()
+            .map(b -> new FixedShardProvider(column, Value.string(b), paramNameSupplier.get()))
+            .collect(Collectors.toList());
+      case TIMESTAMP:
+        return value.getTimestampArray().stream()
+            .map(b -> new FixedShardProvider(column, Value.timestamp(b), paramNameSupplier.get()))
+            .collect(Collectors.toList());
+      case ARRAY:
+      case STRUCT:
+      default:
+        throw new IllegalArgumentException();
     }
   }
 }
