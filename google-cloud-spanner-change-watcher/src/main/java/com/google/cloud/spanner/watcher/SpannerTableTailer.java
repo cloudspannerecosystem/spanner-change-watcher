@@ -136,7 +136,7 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
      * SELECT *
      * FROM Table
      * WHERE LastModified > @lastSeenCommitTimestamp AND ShardId IS NOT NULL AND ShardId IN UNNEST(@shardIds)
-     * ORDER BY LastModified
+     * ORDER BY LastModified, PrimaryKeyCol1, PrimaryKeyCol2, ...
      * LIMIT @limit
      * }</pre>
      *
