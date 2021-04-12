@@ -16,8 +16,10 @@
 
 package com.google.cloud.spanner.watcher.sample.benchmarkapp;
 
+import com.google.cloud.spanner.DatabaseAdminClient;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.DatabaseId;
+import com.google.cloud.spanner.DatabaseNotFoundException;
 import com.google.cloud.spanner.ResultSet;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
@@ -30,6 +32,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Scanner;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -52,21 +55,24 @@ public class Main {
     @Option(
         name = "instance",
         abbrev = 'i',
-        help = "Required: The name of the Cloud Spanner instance to use.",
+        help =
+            "Required: The name of the Cloud Spanner instance to use. This instance must already exist.",
         defaultValue = "")
     public String instance;
 
     @Option(
         name = "database",
         abbrev = 'd',
-        help = "Required: The name of the Cloud Spanner database to use.",
+        help =
+            "Required: The name of the Cloud Spanner database to use. The database will be created if it does not already exist.",
         defaultValue = "")
     public String database;
 
     @Option(
         name = "table",
         abbrev = 't',
-        help = "The name of the table to update and watch. Defaults to Singers.",
+        help =
+            "The name of the table to update and watch. Defaults to Singers. The table will be created if it does not already exist.",
         defaultValue = "Singers")
     public String table;
 
@@ -74,7 +80,7 @@ public class Main {
         name = "index",
         abbrev = 'x',
         help =
-            "The name of the secondary index to define on the table and to use for the poll query. Defaults to Idx_Singers_ShardId_LastUpdated. Set to an empty string to disable using a secondary index. This will have a negative impact on the performance of the poll query if the table contains a large number of rows.",
+            "The name of the secondary index to define on the table and to use for the poll query. Defaults to Idx_Singers_ShardId_LastUpdated. The index will be created if it does not already exist. Set this option to an empty string to disable the creation and usage of a secondary index. This will have a negative impact on the performance of the poll query if the table contains a large number of rows.",
         defaultValue = "Idx_Singers_ShardId_LastUpdated")
     public String index;
 
@@ -83,7 +89,7 @@ public class Main {
         abbrev = 'w',
         help = "The number of write transactions per second to execute",
         defaultValue = "1")
-    public int writeTransactionsPerSecond;
+    public double writeTransactionsPerSecond;
 
     @Option(
         name = "mutationsPerTransaction",
@@ -116,6 +122,13 @@ public class Main {
     public boolean disableSharding;
 
     @Option(
+        name = "disableTableHint",
+        help =
+            "Disables the use of a table hint. This can make the poll query significantly less efficient for large tables. Set this option to true to compare the performance with/without a table hint.",
+        defaultValue = "false")
+    public boolean disableTableHint;
+
+    @Option(
         name = "pollInterval",
         abbrev = 'p',
         help =
@@ -138,6 +151,21 @@ public class Main {
     public int fallbackToWithQuery;
 
     @Option(
+        name = "resetLastSeenCommitTimestamp",
+        abbrev = 'r',
+        help =
+            "Resets the last seen commit timestamp of the Watcher to the current time. Use this option if previous benchmark runs have caused the watcher to lag far behind the latest commit timestamp.",
+        defaultValue = "false")
+    public boolean resetLastSeenCommitTimestamp;
+
+    @Option(
+        name = "dropExistingTable",
+        help =
+            "Drops and re-creates the data table if it already exists. CAUTION: DO NOT USE THIS OPTION ON PRODUCTION DATA.",
+        defaultValue = "false")
+    public boolean dropExistingTable;
+
+    @Option(
         name = "simple",
         abbrev = 's',
         help =
@@ -156,7 +184,7 @@ public class Main {
     if (Strings.isNullOrEmpty(options.instance)
         || Strings.isNullOrEmpty(options.database)
         || Strings.isNullOrEmpty(options.table)
-        || options.writeTransactionsPerSecond < 1
+        || options.writeTransactionsPerSecond < 0
         || options.mutationsPerTransaction < 1
         || options.updateParallelism < 1
         || options.numWatchers < 1
@@ -165,7 +193,7 @@ public class Main {
       printUsage(parser);
       return;
     }
-    if (options.disableSharding && options.numWatchers == 1) {
+    if (options.disableSharding && options.numWatchers != 1) {
       throw new IllegalArgumentException(
           "disableSharding=true can only be used in combination with numWatchers=1");
     }
@@ -221,8 +249,19 @@ public class Main {
 
   private static void createTableAndIndexIfNotExists(BenchmarkOptions options)
       throws InterruptedException, ExecutionException {
-    System.out.println("Checking whether table and/or index needs to be created");
+    System.out.println("Checking whether database, table and/or index needs to be created");
+
     try (Spanner spanner = SpannerOptions.newBuilder().build().getService()) {
+      DatabaseAdminClient dbAdminClient = spanner.getDatabaseAdminClient();
+      try {
+        dbAdminClient.getDatabase(options.instance, options.database);
+        System.out.printf("Database `%s` found.\n", options.database);
+      } catch (DatabaseNotFoundException e) {
+        dbAdminClient
+            .createDatabase(options.instance, options.database, Collections.emptyList())
+            .get();
+      }
+
       DatabaseClient client =
           spanner.getDatabaseClient(
               DatabaseId.of(
@@ -242,6 +281,27 @@ public class Main {
           statements.add(String.format(TABLE_DDL, options.table));
         } else {
           System.out.printf("Table `%s` found.\n", options.table);
+          if (options.dropExistingTable) {
+            if (System.console() == null) {
+              System.out.printf(
+                  "The application will drop the existing table `%s` in 10 seconds. Terminate the application now if that is not the intention.\n",
+                  options.table);
+              Thread.sleep(10_000L);
+            } else {
+              System.out.printf(
+                  "The application is about to drop the existing table `%s`. Press ENTER to continue.\n");
+              try (Scanner scanner = new Scanner(System.in)) {
+                scanner.nextLine();
+              }
+            }
+
+            System.out.printf("Dropping and re-creating table `%s`.\n", options.table);
+            for (String index : getExistingIndexes(client, options.table)) {
+              statements.add(String.format("DROP INDEX `%s`", index));
+            }
+            statements.add(String.format("DROP TABLE `%s`", options.table));
+            statements.add(String.format(TABLE_DDL, options.table));
+          }
         }
       }
       if (!Strings.isNullOrEmpty(options.index)) {
@@ -276,6 +336,24 @@ public class Main {
         System.out.printf("Finished executing CREATE statements\n");
       }
     }
+  }
+
+  private static List<String> getExistingIndexes(DatabaseClient client, String table) {
+    List<String> indexes = new ArrayList<>();
+    try (ResultSet rs =
+        client
+            .singleUse()
+            .executeQuery(
+                Statement.newBuilder(
+                        "SELECT INDEX_NAME FROM INFORMATION_SCHEMA.INDEXES WHERE TABLE_NAME=@tableName")
+                    .bind("tableName")
+                    .to(table)
+                    .build())) {
+      while (rs.next()) {
+        indexes.add(rs.getString(0));
+      }
+    }
+    return indexes;
   }
 
   private static void printUsage(OptionsParser parser) {

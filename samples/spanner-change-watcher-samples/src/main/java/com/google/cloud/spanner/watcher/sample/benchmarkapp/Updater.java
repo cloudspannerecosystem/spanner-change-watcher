@@ -54,11 +54,11 @@ public class Updater {
     final int range = Integer.MAX_VALUE;
     final int threads = options.updateParallelism;
     final int mutationsPerTx = options.mutationsPerTransaction;
-    final int tps = options.writeTransactionsPerSecond;
-    final int sleepIntervalMs = (1000 / tps) * threads;
+    final double tps = options.writeTransactionsPerSecond;
+    final int sleepIntervalMs = (int) ((1000.0d / tps) * (double) threads);
 
     System.out.printf(
-        "Starting updater with %d threads executing %d transactions per second with %d mutations per transaction\n",
+        "Starting updater with %d threads executing %f transactions per second with %d mutations per transaction\n",
         threads, tps, mutationsPerTx);
 
     ExecutorService executor = Executors.newFixedThreadPool(threads);

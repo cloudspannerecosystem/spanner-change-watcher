@@ -339,10 +339,10 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
                 "SELECT *\n"
                     + "FROM `Foo`\n"
                     + "WHERE `AlternativeCommitTS`>@prevCommitTimestamp\n"
-                    + "ORDER BY `AlternativeCommitTS`\n"
+                    + "ORDER BY `AlternativeCommitTS`, `COL0`\n"
                     + "LIMIT @limit")
             .bind("limit")
-            .to(Long.MAX_VALUE)
+            .to(SpannerTableTailer.DEFAULT_LIMIT)
             .bind("prevCommitTimestamp")
             .to(Timestamp.MIN_VALUE)
             .build();
@@ -392,10 +392,10 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
                 "SELECT *\n"
                     + "FROM `Foo`\n"
                     + "WHERE `AlternativeCommitTS`>@prevCommitTimestamp\n"
-                    + "ORDER BY `AlternativeCommitTS`\n"
+                    + "ORDER BY `AlternativeCommitTS`, `COL0`\n"
                     + "LIMIT @limit")
             .bind("limit")
-            .to(Long.MAX_VALUE)
+            .to(SpannerTableTailer.DEFAULT_LIMIT)
             .bind("prevCommitTimestamp")
             .to(Timestamp.MIN_VALUE)
             .build();

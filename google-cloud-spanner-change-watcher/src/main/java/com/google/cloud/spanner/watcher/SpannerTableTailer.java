@@ -79,8 +79,8 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   static final int MAX_WITH_QUERY_SHARD_VALUES = 100;
   static final int DEFAULT_FALLBACK_TO_WITH_QUERY_SECONDS = 60;
   static final long DEFAULT_LIMIT = 10_000L;
-  static final String POLL_QUERY = "SELECT *\nFROM %s\nWHERE `%s`>@prevCommitTimestamp";
-  static final String POLL_QUERY_ORDER_BY = "\nORDER BY `%s`\nLIMIT @limit";
+  static final String POLL_QUERY = "SELECT *\nFROM %s\nWHERE `%s`%s@prevCommitTimestamp";
+  static final String POLL_QUERY_ORDER_BY = "\nORDER BY `%s`, %s\nLIMIT @limit";
 
   /** Builder for a {@link SpannerTableTailer}. */
   public static class Builder {
@@ -232,8 +232,12 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   private final boolean isOwnedExecutor;
   private Timestamp startedPollWithCommitTimestamp;
   private Timestamp lastSeenCommitTimestamp;
+  private boolean lastPollReturnedChanges;
+  private int mutationCountForLastCommitTimestamp;
 
   private String commitTimestampColumn;
+  private List<String> primaryKeyColumns;
+  private String primaryKeyColumnsList;
   private WithPollQueryBuilder withPollQueryBuilder;
 
   private SpannerTableTailer(Builder builder) {
@@ -281,6 +285,16 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
     }
   }
 
+  /**
+   * Returns true if the last poll for changes actually returned changes. This can be used to
+   * monitor the polling activity.
+   */
+  public boolean isLastPollReturnedChanges() {
+    synchronized (lock) {
+      return lastPollReturnedChanges;
+    }
+  }
+
   @Override
   protected void doStart() {
     logger.log(Level.INFO, "Starting watcher for table {0}", table);
@@ -304,12 +318,15 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                     commitTimestampRepository.get(table, shardProvider.getShardValue());
               }
               commitTimestampColumn = Futures.getUnchecked(commitTimestampColFut);
+              primaryKeyColumns = SpannerUtils.getPrimaryKeyColumns(client, table).get();
+              primaryKeyColumnsList = "`" + String.join("`, `", primaryKeyColumns) + "`";
               if (canUseWithQuery()) {
                 withPollQueryBuilder = new WithPollQueryBuilder();
               }
               logger.log(Level.INFO, "Watcher started for table {0}", table);
               notifyStarted();
-              scheduled = executor.schedule(new SpannerTailerRunner(), 0L, TimeUnit.MILLISECONDS);
+              scheduled =
+                  executor.schedule(new SpannerTailerRunner(false), 0L, TimeUnit.MILLISECONDS);
             } catch (Throwable t) {
               logger.log(
                   LogRecordBuilder.of(
@@ -346,9 +363,14 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   }
 
   class SpannerTailerCallback implements ReadyCallback {
+    private final boolean scheduleNextPollDirectlyAfterThis;
     private int mutationCount;
 
-    private void scheduleNextPollOrStop(boolean direct) {
+    SpannerTailerCallback(boolean scheduleNextPollDirectlyAfterThis) {
+      this.scheduleNextPollDirectlyAfterThis = scheduleNextPollDirectlyAfterThis;
+    }
+
+    private void scheduleNextPollOrStop(boolean reachedLimit) {
       // Store the last seen commit timestamp in the repository to ensure that the poller will pick
       // up at the right timestamp again if it is stopped or fails.
       if (lastSeenCommitTimestamp.compareTo(startedPollWithCommitTimestamp) > 0) {
@@ -368,8 +390,10 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
                 public void run() {
                   scheduled =
                       executor.schedule(
-                          new SpannerTailerRunner(),
-                          direct ? 0 : pollInterval.toMillis(),
+                          new SpannerTailerRunner(reachedLimit),
+                          reachedLimit || scheduleNextPollDirectlyAfterThis
+                              ? 0
+                              : pollInterval.toMillis(),
                           TimeUnit.MILLISECONDS);
                 }
               },
@@ -404,6 +428,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
           }
           switch (resultSet.tryNext()) {
             case DONE:
+              synchronized (lock) {
+                lastPollReturnedChanges = mutationCount > 0 || scheduleNextPollDirectlyAfterThis;
+              }
               scheduleNextPollOrStop(mutationCount == limit);
               return CallbackResponse.DONE;
             case NOT_READY:
@@ -416,6 +443,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
               }
               if (ts.compareTo(lastSeenCommitTimestamp) > 0) {
                 lastSeenCommitTimestamp = ts;
+                mutationCountForLastCommitTimestamp = 1;
+              } else {
+                mutationCountForLastCommitTimestamp++;
               }
               mutationCount++;
               break;
@@ -433,6 +463,12 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
   }
 
   class SpannerTailerRunner implements Runnable {
+    private final boolean finishCurrentCommitTimestamp;
+
+    SpannerTailerRunner(boolean finishCurrentCommitTimestamp) {
+      this.finishCurrentCommitTimestamp = finishCurrentCommitTimestamp;
+    }
+
     @Override
     public void run() {
       logger.log(
@@ -441,19 +477,34 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
               "Starting poll for commit timestamp %s", lastSeenCommitTimestamp.toString()));
       startedPollWithCommitTimestamp = lastSeenCommitTimestamp;
       Statement.Builder statementBuilder;
-      if (withPollQueryBuilder != null
-          && (Timestamp.now().getSeconds() - lastSeenCommitTimestamp.getSeconds())
-              > fallbackToWithQuerySeconds) {
+      boolean shouldUseWithQuery;
+      synchronized (lock) {
+        shouldUseWithQuery =
+            lastPollReturnedChanges
+                && !finishCurrentCommitTimestamp
+                && withPollQueryBuilder != null
+                && (Timestamp.now().getSeconds() - lastSeenCommitTimestamp.getSeconds())
+                    > fallbackToWithQuerySeconds;
+      }
+      if (shouldUseWithQuery) {
         statementBuilder = withPollQueryBuilder.withPollQuery;
       } else {
+        String operator = finishCurrentCommitTimestamp ? "=" : ">";
         statementBuilder =
             Statement.newBuilder(
                 String.format(
-                    POLL_QUERY, table.getSqlIdentifier() + tableHint, commitTimestampColumn));
+                    POLL_QUERY,
+                    table.getSqlIdentifier() + tableHint,
+                    commitTimestampColumn,
+                    operator));
         if (shardProvider != null) {
           shardProvider.appendShardFilter(statementBuilder);
         }
-        statementBuilder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
+        statementBuilder.append(
+            String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn, primaryKeyColumnsList));
+        if (finishCurrentCommitTimestamp) {
+          statementBuilder.append(String.format(" OFFSET %d", mutationCountForLastCommitTimestamp));
+        }
       }
       Statement statement =
           statementBuilder
@@ -462,11 +513,14 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
               .bind("limit")
               .to(limit)
               .build();
-      synchronized (lock) {
-        lastPollStatement = statement;
+      if (!finishCurrentCommitTimestamp) {
+        synchronized (lock) {
+          lastPollStatement = statement;
+        }
       }
       try (AsyncResultSet rs = client.singleUse().executeQueryAsync(statement)) {
-        currentPollFuture = rs.setCallback(executor, new SpannerTailerCallback());
+        currentPollFuture =
+            rs.setCallback(executor, new SpannerTailerCallback(finishCurrentCommitTimestamp));
       }
     }
   }
@@ -562,11 +616,9 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
    * }</pre>
    */
   class WithPollQueryBuilder {
-    private final List<String> primaryKeyColumns;
     final Statement.Builder withPollQuery;
 
     WithPollQueryBuilder() throws ExecutionException, InterruptedException {
-      primaryKeyColumns = SpannerUtils.getPrimaryKeyColumns(client, table).get();
       withPollQuery = generateWithPollQuery();
     }
 
@@ -576,24 +628,19 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
       int index = 0;
       for (ShardProvider provider : providers) {
         builder.append("S").append(String.valueOf(index)).append(" AS (\n");
-        builder.append("SELECT ");
-        for (String pk : primaryKeyColumns) {
-          builder.append(String.format("`%s`, ", pk));
-        }
+        builder.append("SELECT ").append(primaryKeyColumnsList).append(", ");
         builder.append(String.format("`%s`", commitTimestampColumn)).append("\n");
         builder.append("FROM ").append(table.getSqlIdentifier()).append(tableHint).append("\n");
         builder.append(String.format("WHERE `%s`>@prevCommitTimestamp", commitTimestampColumn));
         provider.appendShardFilter(builder);
-        builder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
+        builder.append(
+            String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn, primaryKeyColumnsList));
         builder.append("\n),");
         index++;
       }
 
       builder.append("AllShards AS (\n");
-      builder.append("SELECT ");
-      for (String pk : primaryKeyColumns) {
-        builder.append(String.format("`%s`, ", pk));
-      }
+      builder.append("SELECT ").append(primaryKeyColumnsList).append("\n");
       builder.append("FROM (\n");
       for (index = 0; index < providers.size(); index++) {
         if (index > 0) {
@@ -602,7 +649,8 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
         builder.append("SELECT *\n").append("FROM S").append(String.valueOf(index)).append("\n");
       }
       builder.append(")");
-      builder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
+      builder.append(
+          String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn, primaryKeyColumnsList));
       builder.append("\n)\n");
       builder.append(String.format("SELECT %s.*\nFROM AllShards\n", table.getSqlIdentifier()));
       builder.append("INNER JOIN ").append(table.getSqlIdentifier());
@@ -614,7 +662,8 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
         }
         builder.append(String.format("%s.`%s`=AllShards.`%s`", table.getSqlIdentifier(), pk, pk));
       }
-      builder.append(String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn));
+      builder.append(
+          String.format(POLL_QUERY_ORDER_BY, commitTimestampColumn, primaryKeyColumnsList));
 
       return builder;
     }

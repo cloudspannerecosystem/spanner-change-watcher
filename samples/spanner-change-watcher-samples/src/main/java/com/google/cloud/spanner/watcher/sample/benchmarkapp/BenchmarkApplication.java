@@ -16,6 +16,8 @@
 
 package com.google.cloud.spanner.watcher.sample.benchmarkapp;
 
+import com.google.cloud.spanner.Options;
+import com.google.cloud.spanner.watcher.SpannerTableTailer;
 import com.google.cloud.spanner.watcher.sample.benchmarkapp.Main.BenchmarkOptions;
 import com.google.cloud.spanner.watcher.sample.benchmarkapp.Watcher.CpuTime;
 import com.google.common.base.Stopwatch;
@@ -24,6 +26,24 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Runs a simple benchmark application against a single table in a Cloud Spanner database for
+ * spanner-change-watcher.
+ *
+ * <p>The application:
+ *
+ * <ol>
+ *   <li>Starts an {@link Updater} that executes write transactions against the table. The number of
+ *       transactions per second (tps), the number of mutations per transaction (m) and the number
+ *       of parallel threads to use to execute the transactions can be configured. The total number
+ *       of mutations per second is equal to (tps * m). The transactions are distributed evenly (and
+ *       randomly) across the threads. The number of parallel threads will determine how many of the
+ *       transactions could execute in parallel.
+ *   <li>Starts a {@link Watcher} that polls the table for changes using one or more {@link
+ *       SpannerTableTailer}s. The configuration of the {@link SpannerTableTailer}s is determined by
+ *       the {@link Options} that are passed in to the constructor of this class.
+ * </ol>
+ */
 public class BenchmarkApplication {
   private static final long CYCLE_MS = 550L;
   private static final char ESC_CODE = 0x1B;
@@ -68,6 +88,10 @@ public class BenchmarkApplication {
     }
   }
 
+  /**
+   * Prints a single-line simple status text for this benchmark. This method is used when no (ANSI)
+   * console is available.
+   */
   private void printStatusSimple() {
     Duration duration = Duration.ofSeconds(watch.elapsed(TimeUnit.SECONDS));
     CpuTime cpuTime = currentCpuTime();
@@ -85,45 +109,49 @@ public class BenchmarkApplication {
         watcher.isUsingWithQuery() ? " Falling back to WITH query!" : "");
   }
 
+  /**
+   * Prints a multi-line status view of this benchmark. This method is used when the application is
+   * executed on an ANSI console.
+   */
   private void printStatusAdvanced() {
     Duration duration = Duration.ofSeconds(watch.elapsed(TimeUnit.SECONDS));
     CpuTime cpuTime = currentCpuTime();
 
     System.out.printf("%c[12A", ESC_CODE);
-    System.out.printf("-------------------------------------------------------------\n");
+    System.out.printf("------------------------------------------------------------------\n");
     System.out.printf(
-        "                             %c[38;5;130m%s%c[0m             \n",
+        "                                  %c[38;5;118m%s%c[0m             \n",
         ESC_CODE, cycleSymbol(), ESC_CODE);
     System.out.printf(
-        "             Test duration:  %c[38;5;131m%s%c[0m             \n",
+        "                  Test duration:  %c[38;5;105m%s%c[0m             \n",
         ESC_CODE, duration.toString(), ESC_CODE);
     System.out.printf(
-        "            # Transactions:  %c[38;5;132m%d%c[0m             \n",
+        "                 # Transactions:  %c[38;5;160m%d%c[0m             \n",
         ESC_CODE, updater.totalTransactions.longValue(), ESC_CODE);
     System.out.printf(
-        "               # Mutations:  %c[38;5;133m%d%c[0m             \n",
+        "                    # Mutations:  %c[38;5;196m%d%c[0m             \n",
         ESC_CODE, updater.totalMutations.longValue(), ESC_CODE);
     System.out.printf(
-        "        # Received changes:  %c[38;5;134m%d%c[0m             \n",
+        "             # Received changes:  %c[38;5;122m%d%c[0m             \n",
         ESC_CODE, watcher.receivedChanges.longValue(), ESC_CODE);
     System.out.printf(
-        "              Poll latency:  %c[38;5;135m%d seconds%c[0m     \n",
+        "    Change notification latency:  %c[38;5;128m%d seconds%c[0m     \n",
         ESC_CODE, pollLatency(), ESC_CODE);
     System.out.printf(
-        " Avg poll time last minute:  %c[38;5;136m%f seconds%c[0m     \n",
+        "      Avg poll time last minute:  %c[38;5;129m%f seconds%c[0m     \n",
         ESC_CODE, cpuTime.avg, ESC_CODE);
     System.out.printf(
-        "       # Polls last minute:  %c[38;5;137m%d%c[0m             \n",
+        "            # Polls last minute:  %c[38;5;118m%d%c[0m             \n",
         ESC_CODE, cpuTime.executionCount, ESC_CODE);
     System.out.printf(
-        "   Spanner CPU last minute:  %c[38;5;138m%s%c[0m             \n",
+        "   Spanner CPU time last minute:  %c[38;5;119m%s%c[0m             \n",
         ESC_CODE, cpuTime.percentage + "%", ESC_CODE);
     if (watcher.isUsingWithQuery()) {
-      System.out.printf("            Falling back to WITH query!                      \n");
+      System.out.printf("               Falling back to WITH query!                        \n");
     } else {
-      System.out.printf("                                                             \n");
+      System.out.printf("                                                                 \n");
     }
-    System.out.printf("-------------------------------------------------------------\n");
+    System.out.printf("------------------------------------------------------------------\n");
   }
 
   private String cycleSymbol() {

@@ -28,6 +28,7 @@ import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.watcher.FixedShardProvider;
+import com.google.cloud.spanner.watcher.NotNullShardProvider;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.Row;
 import com.google.cloud.spanner.watcher.SpannerTableChangeWatcher.RowChangeCallback;
 import com.google.cloud.spanner.watcher.SpannerTableTailer;
@@ -56,6 +57,19 @@ public class Watcher {
           + "FROM LAST_SEEN_COMMIT_TIMESTAMPS \n"
           + "WHERE TABLE_NAME = @table\n"
           + "AND SHARD_ID_STRING IS NOT NULL AND SHARD_ID_STRING IN UNNEST(@shardIds)";
+  private static final String FETCH_MAX_POLL_LATENCY_WITH_SHARDING_DISABLED_QUERY =
+      "SELECT MAX(TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), LAST_SEEN_COMMIT_TIMESTAMP, SECOND)) MAX_LATENCY\n"
+          + "FROM LAST_SEEN_COMMIT_TIMESTAMPS \n"
+          + "WHERE TABLE_NAME = @table\n"
+          + "AND SHARD_ID_STRING IS NULL";
+  private static final String RESET_LAST_SEEN_COMMIT_TIMESTAMP_STATEMENT =
+      "DELETE FROM LAST_SEEN_COMMIT_TIMESTAMPS\n"
+          + "WHERE TABLE_NAME = @table\n"
+          + "AND SHARD_ID_STRING IS NOT NULL AND SHARD_ID_STRING IN UNNEST(@shardIds)";
+  private static final String RESET_LAST_SEEN_COMMIT_TIMESTAMP_WITH_SHARDING_DISABLED_STATEMENT =
+      "DELETE FROM LAST_SEEN_COMMIT_TIMESTAMPS\n"
+          + "WHERE TABLE_NAME = @table\n"
+          + "AND SHARD_ID_STRING IS NULL";
 
   private final BenchmarkOptions options;
   private final Spanner spanner;
@@ -75,16 +89,22 @@ public class Watcher {
     DatabaseId databaseId =
         DatabaseId.of(spanner.getOptions().getProjectId(), options.instance, options.database);
     this.tableId = TableId.of(databaseId, options.table);
-    this.fetchCpuTimeStatement =
-        Statement.newBuilder(
-            FETCH_CPU_USAGE_LAST_MINUTE_QUERY); // .bind("query").to(pollQueryBuilder.toString()).build();
-    this.fetchMaxPollLatencyStatement =
-        Statement.newBuilder(FETCH_MAX_POLL_LATENCY_QUERY)
-            .bind("table")
-            .to(options.table)
-            .bind("shardIds")
-            .toStringArray(generateShardIdsForCommitTimestampTable(options))
-            .build();
+    this.fetchCpuTimeStatement = Statement.newBuilder(FETCH_CPU_USAGE_LAST_MINUTE_QUERY);
+    if (options.disableSharding) {
+      this.fetchMaxPollLatencyStatement =
+          Statement.newBuilder(FETCH_MAX_POLL_LATENCY_WITH_SHARDING_DISABLED_QUERY)
+              .bind("table")
+              .to(options.table)
+              .build();
+    } else {
+      this.fetchMaxPollLatencyStatement =
+          Statement.newBuilder(FETCH_MAX_POLL_LATENCY_QUERY)
+              .bind("table")
+              .to(options.table)
+              .bind("shardIds")
+              .toStringArray(generateShardIdsForCommitTimestampTable(options))
+              .build();
+    }
   }
 
   private static List<String> generateShardIdsForCommitTimestampTable(BenchmarkOptions options) {
@@ -117,32 +137,47 @@ public class Watcher {
 
       assignedShards.addAll(shardIds);
     }
-
-    if (!assignedShards.containsAll(allShards)) {
-      throw new IllegalStateException("missing shards");
-    }
-    if (!allShards.containsAll(assignedShards)) {
-      throw new IllegalStateException("missing shards 2");
-    }
-    if (allShards.size() != assignedShards.size()) {
-      throw new IllegalStateException("invalid size");
-    }
-
     return result;
   }
 
   public void run() {
+    if (options.resetLastSeenCommitTimestamp) {
+      client
+          .readWriteTransaction()
+          .run(
+              tx -> {
+                if (options.disableSharding) {
+                  return tx.executeUpdate(
+                      Statement.newBuilder(
+                              RESET_LAST_SEEN_COMMIT_TIMESTAMP_WITH_SHARDING_DISABLED_STATEMENT)
+                          .bind("table")
+                          .to(options.table)
+                          .build());
+                } else {
+                  return tx.executeUpdate(
+                      Statement.newBuilder(RESET_LAST_SEEN_COMMIT_TIMESTAMP_STATEMENT)
+                          .bind("table")
+                          .to(options.table)
+                          .bind("shardIds")
+                          .toStringArray(generateShardIdsForCommitTimestampTable(options))
+                          .build());
+                }
+              });
+    }
+
     List<SpannerTableTailer> watchers = new ArrayList<>();
     List<List<Long>> shards = generateShardIds(options);
+
+    boolean useTableHint = !options.disableTableHint && !Strings.isNullOrEmpty(options.index);
     for (int i = 0; i < options.numWatchers; i++) {
       List<Long> shardIds = shards.get(i);
       SpannerTableTailer watcher =
           SpannerTableTailer.newBuilder(spanner, tableId)
-              .setShardProvider(FixedShardProvider.create("ShardId", Value.int64Array(shardIds)))
-              .setTableHint(
-                  Strings.isNullOrEmpty(options.index)
-                      ? ""
-                      : String.format("@{FORCE_INDEX=`%s`}", options.index))
+              .setShardProvider(
+                  options.disableSharding
+                      ? (useTableHint ? NotNullShardProvider.create("ShardId") : null)
+                      : FixedShardProvider.create("ShardId", Value.int64Array(shardIds)))
+              .setTableHint(useTableHint ? String.format("@{FORCE_INDEX=`%s`}", options.index) : "")
               .setLimit(options.limit)
               .setFallbackToWithQuerySeconds(options.fallbackToWithQuery)
               .setPollInterval(Duration.parse(options.pollInterval))
@@ -212,6 +247,15 @@ public class Watcher {
   }
 
   public long fetchMaxPollLatency() {
+    if (this.watchers != null && !this.watchers.isEmpty()) {
+      int numWatchersWithChanges = 0;
+      for (SpannerTableTailer watcher : watchers) {
+        numWatchersWithChanges += watcher.isLastPollReturnedChanges() ? 1 : 0;
+      }
+      if (numWatchersWithChanges <= this.watchers.size() / 2) {
+        return 0L;
+      }
+    }
     try (ResultSet rs = client.singleUse().executeQuery(fetchMaxPollLatencyStatement)) {
       if (rs.next()) {
         if (rs.isNull(0)) {
