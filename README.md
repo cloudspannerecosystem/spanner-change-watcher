@@ -27,6 +27,10 @@ the use of an additional CHANGE_SETS table that registers all read/write transac
 See [Spanner Change Watcher README file](./google-cloud-spanner-change-watcher/README.md)
 for more information.
 
+### Performance
+* See [this article](https://medium.com/@knutolavloite/scaling-up-spanner-change-watcher-82315fbc8962) for more information on how to scale Spanner Change Watcher for large tables using a secondary index that contains a (computed) shard column and the commit timestamp column.
+* See [this article](https://medium.com/@knutolavloite/benchmark-spanner-change-watcher-e5b6cc2ac618) for more information on how to benchmark different configurations of Spanner Change Watcher using the built-in Benchmark Application in the samples directory.
+
 ### Example Usage
 
 ```java
