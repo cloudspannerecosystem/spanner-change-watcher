@@ -766,6 +766,7 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
                 .build()));
   }
 
+  /** Calculates the shard string value for the given {@link Value}. */
   static String shardValueToString(Type.Code type, Value shardValue) {
     if (type == null) {
       return null;

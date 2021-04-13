@@ -367,6 +367,36 @@ public abstract class AbstractMockServerTest {
           .setMetadata(GET_LAST_SEEN_COMMIT_TIMESTAMP_METADATA)
           .build();
 
+  private static final Statement FIND_PRIMARY_KEY_COLUMNS_STATEMENT =
+      Statement.newBuilder(SpannerUtils.PK_QUERY)
+          .bind("catalog")
+          .to("")
+          .bind("schema")
+          .to("")
+          .bind("table")
+          .to("")
+          .build();
+  private static final ResultSetMetadata FIND_PRIMARY_KEY_COLUMNS_METADATA =
+      ResultSetMetadata.newBuilder()
+          .setRowType(
+              StructType.newBuilder()
+                  .addFields(
+                      Field.newBuilder()
+                          .setName("COLUMN_NAME")
+                          .setType(Type.newBuilder().setCode(TypeCode.STRING).build())
+                          .build())
+                  .build())
+          .build();
+  private static final com.google.spanner.v1.ResultSet
+      FIND_PRIMARY_KEY_COLUMNS_RANDOM_RESULT_SET_RESULTS =
+          com.google.spanner.v1.ResultSet.newBuilder()
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(Value.newBuilder().setStringValue("COL0").build())
+                      .build())
+              .setMetadata(FIND_PRIMARY_KEY_COLUMNS_METADATA)
+              .build();
+
   // Statements for SpannerDatabaseTailer
   private static final Statement FIND_ALL_TABLES_STATEMENT =
       Statement.newBuilder(SpannerDatabaseTailer.LIST_TABLE_NAMES_STATEMENT)
@@ -485,9 +515,11 @@ public abstract class AbstractMockServerTest {
                   SpannerTableTailer.POLL_QUERY + SpannerTableTailer.POLL_QUERY_ORDER_BY,
                   "`Foo`",
                   "LastModified",
-                  "LastModified"))
+                  ">",
+                  "LastModified",
+                  "`COL0`"))
           .bind("limit")
-          .to(Long.MAX_VALUE)
+          .to(SpannerTableTailer.DEFAULT_LIMIT)
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
@@ -495,7 +527,7 @@ public abstract class AbstractMockServerTest {
 
   public static final Statement SELECT_FOO_WITH_SHARDING_PER_DAY_STATEMENT =
       Statement.newBuilder(
-              String.format(SpannerTableTailer.POLL_QUERY, "`Foo`", "LastModified")
+              String.format(SpannerTableTailer.POLL_QUERY, "`Foo`", "LastModified", ">")
                   + " AND `ShardId` IN ("
                   + String.format(
                       TimebasedShardProvider.CURRENT_SHARD_FUNCTION_FORMAT,
@@ -506,9 +538,9 @@ public abstract class AbstractMockServerTest {
                       Interval.DAY.getDateFormat(),
                       60)
                   + ")"
-                  + String.format(SpannerTableTailer.POLL_QUERY_ORDER_BY, "LastModified"))
+                  + String.format(SpannerTableTailer.POLL_QUERY_ORDER_BY, "LastModified", "`COL0`"))
           .bind("limit")
-          .to(Long.MAX_VALUE)
+          .to(SpannerTableTailer.DEFAULT_LIMIT)
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
@@ -519,11 +551,12 @@ public abstract class AbstractMockServerTest {
               String.format(
                       SpannerTableTailer.POLL_QUERY,
                       "`Foo`@{FORCE_INDEX=Idx_SecondaryIndex}",
-                      "LastModified")
+                      "LastModified",
+                      ">")
                   + " AND `ShardId` IS NOT NULL"
-                  + String.format(SpannerTableTailer.POLL_QUERY_ORDER_BY, "LastModified"))
+                  + String.format(SpannerTableTailer.POLL_QUERY_ORDER_BY, "LastModified", "`COL0`"))
           .bind("limit")
-          .to(Long.MAX_VALUE)
+          .to(SpannerTableTailer.DEFAULT_LIMIT)
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
@@ -556,9 +589,11 @@ public abstract class AbstractMockServerTest {
                   SpannerTableTailer.POLL_QUERY + SpannerTableTailer.POLL_QUERY_ORDER_BY,
                   "`Bar`",
                   "LastModified",
-                  "LastModified"))
+                  ">",
+                  "LastModified",
+                  "`COL0`"))
           .bind("limit")
-          .to(Long.MAX_VALUE)
+          .to(SpannerTableTailer.DEFAULT_LIMIT)
           .bind("prevCommitTimestamp")
           .to(Timestamp.MIN_VALUE)
           .build();
@@ -634,6 +669,14 @@ public abstract class AbstractMockServerTest {
     mockSpanner.putStatementResult(
         StatementResult.query(
             GET_LAST_COMMIT_TIMESTAMP_STATEMENT, GET_LAST_SEEN_COMMIT_TIMESTAMP_RESULTS));
+    mockSpanner.putStatementResult(
+        StatementResult.query(
+            FIND_PRIMARY_KEY_COLUMNS_STATEMENT.toBuilder().bind("table").to("Foo").build(),
+            FIND_PRIMARY_KEY_COLUMNS_RANDOM_RESULT_SET_RESULTS));
+    mockSpanner.putStatementResult(
+        StatementResult.query(
+            FIND_PRIMARY_KEY_COLUMNS_STATEMENT.toBuilder().bind("table").to("Bar").build(),
+            FIND_PRIMARY_KEY_COLUMNS_RANDOM_RESULT_SET_RESULTS));
 
     // SpannerDatabaseTailer results.
     mockSpanner.putStatementResult(

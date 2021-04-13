@@ -39,6 +39,9 @@ import com.google.cloud.spanner.watcher.TimebasedShardProvider.Interval;
 import com.google.cloud.spanner.watcher.TimebasedShardProvider.TimebasedShardId;
 import com.google.cloud.spanner.watcher.it.SpannerTestHelper.ITSpannerEnv;
 import com.google.common.collect.ImmutableList;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -46,7 +49,10 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -71,7 +77,9 @@ public class ITSpannerTableTailerTest {
             ImmutableList.of(
                 "CREATE TABLE NUMBERS (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
                 "CREATE TABLE NUMBERS_WITH_SHARDS (ID INT64 NOT NULL, NAME STRING(100), SHARD_ID STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
-                "CREATE NULL_FILTERED INDEX IDX_NUMBERS_SHARDS ON NUMBERS_WITH_SHARDS (SHARD_ID, LAST_MODIFIED DESC)"));
+                "CREATE TABLE NUMBERS_WITH_COMPUTED_SHARD (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true), SHARD_ID INT64 AS (MOD(FARM_FINGERPRINT(COALESCE(NAME, '')), 11)) STORED) PRIMARY KEY (ID)",
+                "CREATE NULL_FILTERED INDEX IDX_NUMBERS_SHARDS ON NUMBERS_WITH_SHARDS (SHARD_ID, LAST_MODIFIED)",
+                "CREATE INDEX IDX_NUMBERS_COMPUTED_SHARD ON NUMBERS_WITH_COMPUTED_SHARD (SHARD_ID, LAST_MODIFIED)"));
     logger.info(String.format("Created database %s", database.getId().toString()));
   }
 
@@ -910,6 +918,213 @@ public class ITSpannerTableTailerTest {
             Arrays.asList(
                 Mutation.delete("NUMBERS_WITH_SHARDS", Key.of(2L)),
                 Mutation.delete("NUMBERS_WITH_SHARDS", Key.of(3L))));
+    Thread.sleep(500L);
+    assertThat(receivedChanges).isEmpty();
+    tailer.stopAsync();
+    tailer.awaitTerminated();
+  }
+
+  @Test
+  public void testSpannerTailerWithFixedArrayShard() throws Exception {
+    HashFunction hashFunction = Hashing.farmHashFingerprint64();
+    Charset utf8 = Charset.forName("UTF8");
+    Function<String, Long> shardFunction =
+        s -> {
+          return hashFunction.hashString(s, utf8).asLong() % 11L;
+        };
+    final int numShards = 21;
+    List<Long> shards =
+        Stream.iterate(-10L, n -> n + 1L).limit(numShards).collect(Collectors.toList());
+    Spanner spanner = env.getSpanner();
+    DatabaseClient client = spanner.getDatabaseClient(database.getId());
+    SpannerTableTailer tailer =
+        SpannerTableTailer.newBuilder(
+                spanner, TableId.of(database.getId(), "NUMBERS_WITH_COMPUTED_SHARD"))
+            .setShardProvider(FixedShardProvider.create("SHARD_ID", Value.int64Array(shards)))
+            .setTableHint("@{FORCE_INDEX=IDX_NUMBERS_COMPUTED_SHARD}")
+            .setPollInterval(Duration.ofMillis(10L))
+            .setCommitTimestampRepository(
+                SpannerCommitTimestampRepository.newBuilder(spanner, database.getId())
+                    .setInitialCommitTimestamp(Timestamp.MIN_VALUE)
+                    .build())
+            .build();
+    tailer.addCallback(
+        new RowChangeCallback() {
+          @Override
+          public void rowChange(TableId table, Row row, Timestamp commitTimestamp) {
+            logger.info(
+                String.format(
+                    "Received changed for table %s: %s", table, row.asStruct().toString()));
+            receivedChanges.add(row.asStruct());
+            latch.countDown();
+          }
+        });
+    tailer.startAsync();
+    tailer.awaitRunning();
+
+    latch = new CountDownLatch(3);
+
+    Timestamp commitTs =
+        client.write(
+            Arrays.asList(
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_COMPUTED_SHARD")
+                    .set("ID")
+                    .to(1L)
+                    .set("NAME")
+                    .to("ONE")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_COMPUTED_SHARD")
+                    .set("ID")
+                    .to(2L)
+                    .set("NAME")
+                    .to("TWO")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_COMPUTED_SHARD")
+                    .set("ID")
+                    .to(3L)
+                    .set("NAME")
+                    .to("THREE")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build()));
+
+    List<Struct> inserts = drainChanges();
+    assertThat(inserts).hasSize(3);
+    assertThat(inserts)
+        .containsExactly(
+            Struct.newBuilder()
+                .set("ID")
+                .to(1L)
+                .set("NAME")
+                .to("ONE")
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .set("SHARD_ID")
+                .to(shardFunction.apply("ONE"))
+                .build(),
+            Struct.newBuilder()
+                .set("ID")
+                .to(2L)
+                .set("NAME")
+                .to("TWO")
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .set("SHARD_ID")
+                .to(shardFunction.apply("TWO"))
+                .build(),
+            Struct.newBuilder()
+                .set("ID")
+                .to(3L)
+                .set("NAME")
+                .to("THREE")
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .set("SHARD_ID")
+                .to(shardFunction.apply("THREE"))
+                .build());
+
+    latch = new CountDownLatch(2);
+    commitTs =
+        client.write(
+            Arrays.asList(
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_COMPUTED_SHARD")
+                    .set("ID")
+                    .to(4L)
+                    .set("NAME")
+                    .to("FOUR")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newInsertOrUpdateBuilder("NUMBERS_WITH_COMPUTED_SHARD")
+                    .set("ID")
+                    .to(5L)
+                    .set("NAME")
+                    .to("FIVE")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build()));
+
+    inserts = drainChanges();
+    assertThat(inserts).hasSize(2);
+    assertThat(inserts)
+        .containsExactly(
+            Struct.newBuilder()
+                .set("ID")
+                .to(4L)
+                .set("NAME")
+                .to("FOUR")
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .set("SHARD_ID")
+                .to(shardFunction.apply("FOUR"))
+                .build(),
+            Struct.newBuilder()
+                .set("ID")
+                .to(5L)
+                .set("NAME")
+                .to("FIVE")
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .set("SHARD_ID")
+                .to(shardFunction.apply("FIVE"))
+                .build());
+
+    latch = new CountDownLatch(2);
+    commitTs =
+        client.write(
+            Arrays.asList(
+                Mutation.newUpdateBuilder("NUMBERS_WITH_COMPUTED_SHARD")
+                    .set("ID")
+                    .to(1L)
+                    .set("NAME")
+                    .to("one")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build(),
+                Mutation.newUpdateBuilder("NUMBERS_WITH_COMPUTED_SHARD")
+                    .set("ID")
+                    .to(5L)
+                    .set("NAME")
+                    .to("five")
+                    .set("LAST_MODIFIED")
+                    .to(Value.COMMIT_TIMESTAMP)
+                    .build()));
+
+    List<Struct> updates = drainChanges();
+    assertThat(updates).hasSize(2);
+    assertThat(updates)
+        .containsExactly(
+            Struct.newBuilder()
+                .set("ID")
+                .to(1L)
+                .set("NAME")
+                .to("one")
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .set("SHARD_ID")
+                .to(shardFunction.apply("one"))
+                .build(),
+            Struct.newBuilder()
+                .set("ID")
+                .to(5L)
+                .set("NAME")
+                .to("five")
+                .set("LAST_MODIFIED")
+                .to(commitTs)
+                .set("SHARD_ID")
+                .to(shardFunction.apply("five"))
+                .build());
+
+    // Verify that deletes are not picked up by the poller.
+    commitTs =
+        client.write(
+            Arrays.asList(
+                Mutation.delete("NUMBERS_WITH_COMPUTED_SHARD", Key.of(2L)),
+                Mutation.delete("NUMBERS_WITH_COMPUTED_SHARD", Key.of(3L))));
     Thread.sleep(500L);
     assertThat(receivedChanges).isEmpty();
     tailer.stopAsync();

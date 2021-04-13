@@ -46,7 +46,9 @@ import java.math.BigDecimal;
  * }
  * }</pre>
  */
-public final class FixedShardProvider implements ShardProvider {
+public class FixedShardProvider implements ShardProvider {
+  private final String column;
+  private final String parameterName;
   private final Value value;
   private final String sqlAppendment;
 
@@ -86,26 +88,36 @@ public final class FixedShardProvider implements ShardProvider {
     return new FixedShardProvider(column, value);
   }
 
-  private FixedShardProvider(String column, Value value) {
-    Preconditions.checkNotNull(column);
-    Preconditions.checkNotNull(value);
-    this.value = value;
+  FixedShardProvider(String column, Value value) {
+    this(column, value, "shard");
+  }
+
+  FixedShardProvider(String column, Value value, String parameterName) {
+    this.column = Preconditions.checkNotNull(column);
+    this.parameterName = Preconditions.checkNotNull(parameterName);
+    this.value = Preconditions.checkNotNull(value);
     if (value.getType().getCode() == Code.ARRAY) {
       this.sqlAppendment =
-          String.format(" AND `%s` IS NOT NULL AND `%s` IN UNNEST(@shard)", column, column);
+          String.format(
+              " AND `%s` IS NOT NULL AND `%s` IN UNNEST(@%s)", column, column, parameterName);
     } else {
-      this.sqlAppendment = String.format(" AND `%s`=@shard", column);
+      this.sqlAppendment = String.format(" AND `%s`=@%s", column, parameterName);
     }
   }
 
   @Override
   public void appendShardFilter(Builder statementBuilder) {
     statementBuilder.append(sqlAppendment);
-    statementBuilder.bind("shard").to(value);
+    statementBuilder.bind(parameterName).to(value);
   }
 
   @Override
   public Value getShardValue() {
     return value;
+  }
+
+  @Override
+  public String getColumnName() {
+    return column;
   }
 }

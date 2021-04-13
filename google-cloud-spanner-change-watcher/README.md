@@ -65,6 +65,10 @@ watcher.addCallback(
 watcher.startAsync().awaitRunning();
 ```
 
+### Performance
+* See [this article](https://medium.com/@knutolavloite/scaling-up-spanner-change-watcher-82315fbc8962) for more information on how to scale Spanner Change Watcher for large tables using a secondary index that contains a (computed) shard column and the commit timestamp column.
+* See [this article](https://medium.com/@knutolavloite/benchmark-spanner-change-watcher-e5b6cc2ac618) for more information on how to benchmark different configurations of Spanner Change Watcher using the built-in Benchmark Application in the samples directory.
+
 ### Further Samples
 Take a look at [Samples.java](../samples/spanner-change-watcher-samples/src/main/java/com/google/cloud/spanner/watcher/sample/Samples.java)
 for additional examples of more advanced use cases.
