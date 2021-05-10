@@ -115,9 +115,9 @@ public class SpannerDatabaseChangeEventPublisherTest extends AbstractMockServerT
                 new MessageReceiver() {
                   @Override
                   public void receiveMessage(PubsubMessage message, AckReplyConsumer consumer) {
-                    latch.countDown();
                     receivedMessages.incrementAndGet();
                     consumer.ack();
+                    latch.countDown();
                   }
                 })
             .setChannelProvider(channelProvider)
