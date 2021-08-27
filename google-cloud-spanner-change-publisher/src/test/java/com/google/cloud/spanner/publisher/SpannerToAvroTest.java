@@ -32,6 +32,7 @@ import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.Type;
 import com.google.cloud.spanner.Type.StructField;
+import com.google.cloud.spanner.Value;
 import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro;
 import com.google.cloud.spanner.publisher.SpannerToAvroFactory.SpannerToAvro.SchemaSet;
 import com.google.cloud.spanner.watcher.SpannerUtils;
@@ -62,12 +63,13 @@ public class SpannerToAvroTest {
           StructField.of("IS_NULLABLE", Type.string()));
 
   private static ResultSet createSchemaResultSet() {
+    int index = 1;
     return ResultSets.forRows(
         SCHEMA_ROW_TYPE,
         Arrays.asList(
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C1")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("INT64")
                 .set("IS_NULLABLE")
@@ -75,7 +77,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C2")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("INT64")
                 .set("IS_NULLABLE")
@@ -83,7 +85,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C3")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("BOOL")
                 .set("IS_NULLABLE")
@@ -91,7 +93,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C4")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("BOOL")
                 .set("IS_NULLABLE")
@@ -99,7 +101,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C5")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("BYTES(24)")
                 .set("IS_NULLABLE")
@@ -107,7 +109,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C6")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("BYTES(MAX)")
                 .set("IS_NULLABLE")
@@ -115,7 +117,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C7")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("STRING(100)")
                 .set("IS_NULLABLE")
@@ -123,7 +125,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C8")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("STRING(MAX)")
                 .set("IS_NULLABLE")
@@ -131,7 +133,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C9")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("FLOAT64")
                 .set("IS_NULLABLE")
@@ -139,7 +141,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C10")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("FLOAT64")
                 .set("IS_NULLABLE")
@@ -147,7 +149,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C11")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("DATE")
                 .set("IS_NULLABLE")
@@ -155,7 +157,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C12")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("DATE")
                 .set("IS_NULLABLE")
@@ -163,7 +165,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C13")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("TIMESTAMP")
                 .set("IS_NULLABLE")
@@ -171,7 +173,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C14")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("TIMESTAMP")
                 .set("IS_NULLABLE")
@@ -179,7 +181,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C15")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("NUMERIC")
                 .set("IS_NULLABLE")
@@ -187,9 +189,25 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C16")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("NUMERIC")
+                .set("IS_NULLABLE")
+                .to("YES")
+                .build(),
+            Struct.newBuilder()
+                .set("COLUMN_NAME")
+                .to(String.format("C%d", index++))
+                .set("SPANNER_TYPE")
+                .to("JSON")
+                .set("IS_NULLABLE")
+                .to("NO")
+                .build(),
+            Struct.newBuilder()
+                .set("COLUMN_NAME")
+                .to(String.format("C%d", index++))
+                .set("SPANNER_TYPE")
+                .to("JSON")
                 .set("IS_NULLABLE")
                 .to("YES")
                 .build(),
@@ -197,7 +215,7 @@ public class SpannerToAvroTest {
             // ARRAY types.
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C17")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<INT64>")
                 .set("IS_NULLABLE")
@@ -205,7 +223,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C18")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<INT64>")
                 .set("IS_NULLABLE")
@@ -213,7 +231,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C19")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<BOOL>")
                 .set("IS_NULLABLE")
@@ -221,7 +239,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C20")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<BOOL>")
                 .set("IS_NULLABLE")
@@ -229,7 +247,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C21")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<BYTES(24)>")
                 .set("IS_NULLABLE")
@@ -237,7 +255,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C22")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<BYTES(MAX)>")
                 .set("IS_NULLABLE")
@@ -245,7 +263,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C23")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<STRING(100)>")
                 .set("IS_NULLABLE")
@@ -253,7 +271,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C24")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<STRING(MAX)>")
                 .set("IS_NULLABLE")
@@ -261,7 +279,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C25")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<FLOAT64>")
                 .set("IS_NULLABLE")
@@ -269,7 +287,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C26")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<FLOAT64>")
                 .set("IS_NULLABLE")
@@ -277,7 +295,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C27")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<DATE>")
                 .set("IS_NULLABLE")
@@ -285,7 +303,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C28")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<DATE>")
                 .set("IS_NULLABLE")
@@ -293,7 +311,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C29")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<TIMESTAMP>")
                 .set("IS_NULLABLE")
@@ -301,7 +319,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C30")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<TIMESTAMP>")
                 .set("IS_NULLABLE")
@@ -309,7 +327,7 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C31")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<NUMERIC>")
                 .set("IS_NULLABLE")
@@ -317,9 +335,25 @@ public class SpannerToAvroTest {
                 .build(),
             Struct.newBuilder()
                 .set("COLUMN_NAME")
-                .to("C32")
+                .to(String.format("C%d", index++))
                 .set("SPANNER_TYPE")
                 .to("ARRAY<NUMERIC>")
+                .set("IS_NULLABLE")
+                .to("YES")
+                .build(),
+            Struct.newBuilder()
+                .set("COLUMN_NAME")
+                .to(String.format("C%d", index++))
+                .set("SPANNER_TYPE")
+                .to("ARRAY<JSON>")
+                .set("IS_NULLABLE")
+                .to("NO")
+                .build(),
+            Struct.newBuilder()
+                .set("COLUMN_NAME")
+                .to(String.format("C%d", index++))
+                .set("SPANNER_TYPE")
+                .to("ARRAY<JSON>")
                 .set("IS_NULLABLE")
                 .to("YES")
                 .build()));
@@ -333,58 +367,69 @@ public class SpannerToAvroTest {
             "NAMESPACE",
             createSchemaResultSet(),
             "commitTimestamp");
+    int index = 1;
     Schema schema = set.avroSchema();
-    assertThat(schema.getField("C1").schema()).isEqualTo(SchemaBuilder.builder().longType());
-    assertThat(schema.getField("C1").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C2").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().longType());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().longType().endUnion());
-    assertThat(schema.getField("C2").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C3").schema()).isEqualTo(SchemaBuilder.builder().booleanType());
-    assertThat(schema.getField("C3").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C4").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().booleanType());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().booleanType().endUnion());
-    assertThat(schema.getField("C4").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C5").schema()).isEqualTo(SchemaBuilder.builder().bytesType());
-    assertThat(schema.getField("C5").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C6").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().bytesType());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().bytesType().endUnion());
-    assertThat(schema.getField("C6").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C7").schema()).isEqualTo(SchemaBuilder.builder().stringType());
-    assertThat(schema.getField("C7").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C8").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
-    assertThat(schema.getField("C8").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C9").schema()).isEqualTo(SchemaBuilder.builder().doubleType());
-    assertThat(schema.getField("C9").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C10").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().doubleType());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().doubleType().endUnion());
-    assertThat(schema.getField("C10").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    // DATE, TIMESTAMP and NUMERIC are all handled as STRING.
-    assertThat(schema.getField("C11").schema()).isEqualTo(SchemaBuilder.builder().stringType());
-    assertThat(schema.getField("C11").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C12").schema())
+    // DATE, TIMESTAMP, NUMERIC and JSON are all handled as STRING.
+    // DATE
+    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
-    assertThat(schema.getField("C12").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C13").schema()).isEqualTo(SchemaBuilder.builder().stringType());
-    assertThat(schema.getField("C13").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C14").schema())
+    // TIMESTAMP
+    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
-    assertThat(schema.getField("C14").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C15").schema()).isEqualTo(SchemaBuilder.builder().stringType());
-    assertThat(schema.getField("C15").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C16").schema())
+    // NUMERIC
+    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
-    assertThat(schema.getField("C16").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
+
+    // JSON
+    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
     // ARRAY types.
-    assertThat(schema.getField("C17").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .array()
@@ -394,8 +439,8 @@ public class SpannerToAvroTest {
                 .and()
                 .longType()
                 .endUnion());
-    assertThat(schema.getField("C17").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C18").schema())
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .unionOf()
@@ -409,9 +454,9 @@ public class SpannerToAvroTest {
                 .longType()
                 .endUnion()
                 .endUnion());
-    assertThat(schema.getField("C18").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C19").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .array()
@@ -421,8 +466,8 @@ public class SpannerToAvroTest {
                 .and()
                 .booleanType()
                 .endUnion());
-    assertThat(schema.getField("C19").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C20").schema())
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .unionOf()
@@ -436,9 +481,9 @@ public class SpannerToAvroTest {
                 .booleanType()
                 .endUnion()
                 .endUnion());
-    assertThat(schema.getField("C20").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C21").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .array()
@@ -448,8 +493,8 @@ public class SpannerToAvroTest {
                 .and()
                 .bytesType()
                 .endUnion());
-    assertThat(schema.getField("C21").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C22").schema())
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .unionOf()
@@ -463,9 +508,9 @@ public class SpannerToAvroTest {
                 .bytesType()
                 .endUnion()
                 .endUnion());
-    assertThat(schema.getField("C22").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C23").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .array()
@@ -475,8 +520,8 @@ public class SpannerToAvroTest {
                 .and()
                 .stringType()
                 .endUnion());
-    assertThat(schema.getField("C23").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C24").schema())
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .unionOf()
@@ -490,9 +535,9 @@ public class SpannerToAvroTest {
                 .stringType()
                 .endUnion()
                 .endUnion());
-    assertThat(schema.getField("C24").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C25").schema())
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .array()
@@ -502,8 +547,8 @@ public class SpannerToAvroTest {
                 .and()
                 .doubleType()
                 .endUnion());
-    assertThat(schema.getField("C25").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C26").schema())
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .unionOf()
@@ -517,10 +562,11 @@ public class SpannerToAvroTest {
                 .doubleType()
                 .endUnion()
                 .endUnion());
-    assertThat(schema.getField("C26").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    // DATE, TIMESTAMP and NUMERIC are all handled as STRING.
-    assertThat(schema.getField("C27").schema())
+    // DATE, TIMESTAMP, NUMERIC and JSON are all handled as STRING.
+    // DATE
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .array()
@@ -530,8 +576,8 @@ public class SpannerToAvroTest {
                 .and()
                 .stringType()
                 .endUnion());
-    assertThat(schema.getField("C27").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C28").schema())
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .unionOf()
@@ -545,9 +591,10 @@ public class SpannerToAvroTest {
                 .stringType()
                 .endUnion()
                 .endUnion());
-    assertThat(schema.getField("C28").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C29").schema())
+    // TIMESTAMP
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .array()
@@ -557,8 +604,8 @@ public class SpannerToAvroTest {
                 .and()
                 .stringType()
                 .endUnion());
-    assertThat(schema.getField("C29").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C30").schema())
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .unionOf()
@@ -572,9 +619,10 @@ public class SpannerToAvroTest {
                 .stringType()
                 .endUnion()
                 .endUnion());
-    assertThat(schema.getField("C30").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField("C31").schema())
+    // NUMERIC
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .array()
@@ -584,8 +632,8 @@ public class SpannerToAvroTest {
                 .and()
                 .stringType()
                 .endUnion());
-    assertThat(schema.getField("C31").schema().isNullable()).isFalse();
-    assertThat(schema.getField("C32").schema())
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(
             SchemaBuilder.builder()
                 .unionOf()
@@ -599,7 +647,35 @@ public class SpannerToAvroTest {
                 .stringType()
                 .endUnion()
                 .endUnion());
-    assertThat(schema.getField("C32").schema().isNullable()).isTrue();
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
+
+    // JSON
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(
+            SchemaBuilder.builder()
+                .array()
+                .items()
+                .unionOf()
+                .nullType()
+                .and()
+                .stringType()
+                .endUnion());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(
+            SchemaBuilder.builder()
+                .unionOf()
+                .nullType()
+                .and()
+                .array()
+                .items()
+                .unionOf()
+                .nullType()
+                .and()
+                .stringType()
+                .endUnion()
+                .endUnion());
+    assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
   }
 
   @Test
@@ -631,85 +707,94 @@ public class SpannerToAvroTest {
         SpannerToAvroFactory.INSTANCE.create(
             client, TableId.of(DatabaseId.of("p", "i", "i"), "FOO"));
 
+    int index = 1;
     Struct row =
         Struct.newBuilder()
-            .set("C1")
+            .set(String.format("C%d", index++))
             .to(1L)
-            .set("C2")
+            .set(String.format("C%d", index++))
             .to((Long) null)
-            .set("C3")
+            .set(String.format("C%d", index++))
             .to(true)
-            .set("C4")
+            .set(String.format("C%d", index++))
             .to((Boolean) null)
-            .set("C5")
+            .set(String.format("C%d", index++))
             .to(ByteArray.copyFrom("TEST"))
-            .set("C6")
+            .set(String.format("C%d", index++))
             .to((ByteArray) null)
-            .set("C7")
+            .set(String.format("C%d", index++))
             .to("TEST")
-            .set("C8")
+            .set(String.format("C%d", index++))
             .to((String) null)
-            .set("C9")
+            .set(String.format("C%d", index++))
             .to(3.14D)
-            .set("C10")
+            .set(String.format("C%d", index++))
             .to((Double) null)
-            .set("C11")
+            .set(String.format("C%d", index++))
             .to(Date.fromYearMonthDay(2020, 3, 31))
-            .set("C12")
+            .set(String.format("C%d", index++))
             .to((Date) null)
-            .set("C13")
+            .set(String.format("C%d", index++))
             .to(Timestamp.parseTimestamp("2020-03-31T21:21:15.120Z"))
-            .set("C14")
+            .set(String.format("C%d", index++))
             .to((Timestamp) null)
-            .set("C15")
+            .set(String.format("C%d", index++))
             .to(new BigDecimal("3.14"))
-            .set("C16")
+            .set(String.format("C%d", index++))
             .to((BigDecimal) null)
+            .set(String.format("C%d", index++))
+            .to(Value.json("{\"key\": \"value\"}"))
+            .set(String.format("C%d", index++))
+            .to(Value.json(null))
             // ARRAY types
-            .set("C17")
+            .set(String.format("C%d", index++))
             .toInt64Array(Arrays.asList(1L, null, 3L, null, 5L))
-            .set("C18")
+            .set(String.format("C%d", index++))
             .toInt64Array((long[]) null)
-            .set("C19")
+            .set(String.format("C%d", index++))
             .toBoolArray(Arrays.asList(true, null, false, null))
-            .set("C20")
+            .set(String.format("C%d", index++))
             .toBoolArray((boolean[]) null)
-            .set("C21")
+            .set(String.format("C%d", index++))
             .toBytesArray(
                 Arrays.asList(ByteArray.copyFrom("TEST"), null, ByteArray.copyFrom("FOO"), null))
-            .set("C22")
+            .set(String.format("C%d", index++))
             .toBytesArray(null)
-            .set("C23")
+            .set(String.format("C%d", index++))
             .toStringArray(Arrays.asList("TEST", null, "FOO", null))
-            .set("C24")
+            .set(String.format("C%d", index++))
             .toStringArray(null)
-            .set("C25")
+            .set(String.format("C%d", index++))
             .toFloat64Array(Arrays.asList(3.14D, null, 6.626D, null))
-            .set("C26")
+            .set(String.format("C%d", index++))
             .toFloat64Array((double[]) null)
-            .set("C27")
+            .set(String.format("C%d", index++))
             .toDateArray(
                 Arrays.asList(
                     Date.fromYearMonthDay(2020, 3, 31),
                     null,
                     Date.fromYearMonthDay(1970, 1, 1),
                     null))
-            .set("C28")
+            .set(String.format("C%d", index++))
             .toDateArray(null)
-            .set("C29")
+            .set(String.format("C%d", index++))
             .toTimestampArray(
                 Arrays.asList(
                     Timestamp.parseTimestamp("2020-03-31T21:21:15.120Z"),
                     null,
                     Timestamp.ofTimeSecondsAndNanos(0, 0),
                     null))
-            .set("C30")
+            .set(String.format("C%d", index++))
             .toTimestampArray(null)
-            .set("C31")
+            .set(String.format("C%d", index++))
             .toNumericArray(
                 Arrays.asList(new BigDecimal("3.14"), null, new BigDecimal("6.6260"), null))
-            .set("C32")
+            .set(String.format("C%d", index++))
             .toNumericArray(null)
+            .set(String.format("C%d", index++))
+            .toJsonArray(Arrays.asList("{\"key1\": \"val1\"}", null, "{\"key2\": \"val2\"}", null))
+            .set(String.format("C%d", index++))
+            .toJsonArray(null)
             .build();
 
     ByteString data = converter.convert(row);
@@ -726,51 +811,57 @@ public class SpannerToAvroTest {
     GenericDatumReader<GenericRecord> reader = new GenericDatumReader<>(set.avroSchema());
     GenericRecord record = reader.read(null, decoder);
     assertThat(record).isNotNull();
-    assertThat(record.get("C1")).isEqualTo(1L);
-    assertThat(record.get("C2")).isNull();
-    assertThat(record.get("C3")).isEqualTo(true);
-    assertThat(record.get("C4")).isNull();
-    assertThat(record.get("C5")).isEqualTo(ByteBuffer.wrap("TEST".getBytes()));
-    assertThat(record.get("C6")).isNull();
-    assertThat(record.get("C7")).isEqualTo(new Utf8("TEST"));
-    assertThat(record.get("C8")).isNull();
-    assertThat(record.get("C9")).isEqualTo(3.14D);
-    assertThat(record.get("C10")).isNull();
-    assertThat(record.get("C11")).isEqualTo(new Utf8("2020-03-31"));
-    assertThat(record.get("C12")).isNull();
-    assertThat(record.get("C13")).isEqualTo(new Utf8("2020-03-31T21:21:15.120000000Z"));
-    assertThat(record.get("C14")).isNull();
-    assertThat(record.get("C15")).isEqualTo(new Utf8("3.14"));
-    assertThat(record.get("C16")).isNull();
+    index = 1;
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(1L);
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(true);
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(ByteBuffer.wrap("TEST".getBytes()));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("TEST"));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(3.14D);
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("2020-03-31"));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("2020-03-31T21:21:15.120000000Z"));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("3.14"));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("{\"key\": \"value\"}"));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
     // ARRAY types
-    assertThat(record.get("C17")).isEqualTo(Arrays.asList(1L, null, 3L, null, 5L));
-    assertThat(record.get("C18")).isNull();
-    assertThat(record.get("C19")).isEqualTo(Arrays.asList(true, null, false, null));
-    assertThat(record.get("C20")).isNull();
-    assertThat(record.get("C21"))
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(Arrays.asList(1L, null, 3L, null, 5L));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(Arrays.asList(true, null, false, null));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++)))
         .isEqualTo(
             Arrays.asList(
                 ByteBuffer.wrap("TEST".getBytes()), null, ByteBuffer.wrap("FOO".getBytes()), null));
-    assertThat(record.get("C22")).isNull();
-    assertThat(record.get("C23"))
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++)))
         .isEqualTo(Arrays.asList(new Utf8("TEST"), null, new Utf8("FOO"), null));
-    assertThat(record.get("C24")).isNull();
-    assertThat(record.get("C25")).isEqualTo(Arrays.asList(3.14D, null, 6.626D, null));
-    assertThat(record.get("C26")).isNull();
-    assertThat(record.get("C27"))
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isEqualTo(Arrays.asList(3.14D, null, 6.626D, null));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++)))
         .isEqualTo(Arrays.asList(new Utf8("2020-03-31"), null, new Utf8("1970-01-01"), null));
-    assertThat(record.get("C28")).isNull();
-    assertThat(record.get("C29"))
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++)))
         .isEqualTo(
             Arrays.asList(
                 new Utf8("2020-03-31T21:21:15.120000000Z"),
                 null,
                 new Utf8("1970-01-01T00:00:00Z"),
                 null));
-    assertThat(record.get("C30")).isNull();
-    assertThat(record.get("C31"))
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++)))
         .isEqualTo(Arrays.asList(new Utf8("3.14"), null, new Utf8("6.6260"), null));
-    assertThat(record.get("C32")).isNull();
+    assertThat(record.get(String.format("C%d", index++))).isNull();
+    assertThat(record.get(String.format("C%d", index++)))
+        .isEqualTo(Arrays.asList(new Utf8("{\"key1\": \"val1\"}"), null, new Utf8("{\"key2\": \"val2\"}"), null));
+    assertThat(record.get(String.format("C%d", index++))).isNull();
   }
 
   private ResultSet createTimestampColumnResultSet() {

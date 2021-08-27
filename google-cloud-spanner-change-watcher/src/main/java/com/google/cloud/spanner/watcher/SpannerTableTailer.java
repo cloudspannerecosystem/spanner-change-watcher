@@ -702,6 +702,10 @@ public class SpannerTableTailer extends AbstractApiService implements SpannerTab
         return value.getInt64Array().stream()
             .map(b -> new FixedShardProvider(column, Value.int64(b), paramNameSupplier.get()))
             .collect(Collectors.toList());
+      case JSON:
+        return value.getJsonArray().stream()
+            .map(b -> new FixedShardProvider(column, Value.json(b), paramNameSupplier.get()))
+            .collect(Collectors.toList());
       case NUMERIC:
         return value.getNumericArray().stream()
             .map(b -> new FixedShardProvider(column, Value.numeric(b), paramNameSupplier.get()))

@@ -776,6 +776,8 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
         return arrayToString(shardValue);
       case NUMERIC:
         return shardValue.getNumeric().toString();
+      case JSON:
+        return shardValue.getJson();
       case STRING:
         return shardValue.getString();
 
@@ -815,6 +817,10 @@ public class SpannerCommitTimestampRepository implements CommitTimestampReposito
       case INT64:
         return value.getInt64Array().stream()
             .map(b -> b.toString())
+            .collect(Collectors.joining(","));
+      case JSON:
+        return value.getJsonArray().stream()
+            .map(b -> Base64.getEncoder().encodeToString(b.getBytes(UTF8)))
             .collect(Collectors.joining(","));
       case NUMERIC:
         return value.getNumericArray().stream()

@@ -42,6 +42,7 @@ import com.google.cloud.spanner.watcher.TimebasedShardProvider.TimebasedShardId;
 import com.google.cloud.spanner.watcher.it.SpannerTestHelper.ITSpannerEnv;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
+import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
@@ -85,6 +86,7 @@ public class ITSpannerTableTailerStressTest {
           + "  ColBool        BOOL        NOT NULL,\n"
           + "  ColString      STRING(100) NOT NULL,\n"
           + "  ColStringMax   STRING(MAX) NOT NULL,\n"
+          + "  ColJson        JSON        NOT NULL,\n"
           + "  ColBytes       BYTES(100)  NOT NULL,\n"
           + "  ColBytesMax    BYTES(MAX)  NOT NULL,\n"
           + "  ColDate        DATE        NOT NULL,\n"
@@ -104,6 +106,7 @@ public class ITSpannerTableTailerStressTest {
           + "  ColBoolArray      ARRAY<BOOL>,\n"
           + "  ColStringArray    ARRAY<STRING(100)>,\n"
           + "  ColStringMaxArray ARRAY<STRING(MAX)>,\n"
+          + "  ColJsonArray      ARRAY<JSON>,\n"
           + "  ColBytesArray     ARRAY<BYTES(100)>,\n"
           + "  ColBytesMaxArray  ARRAY<BYTES(MAX)>,\n"
           + "  ColDateArray      ARRAY<DATE>,\n"
@@ -268,6 +271,8 @@ public class ITSpannerTableTailerStressTest {
         .to(randomString(100))
         .set("ColStringMax")
         .to(randomString(1000))
+        .set("ColJson")
+        .to(Value.json(randomJson(100)))
         .set("ColBytes")
         .to(randomBytes(100))
         .set("ColBytesMax")
@@ -290,6 +295,8 @@ public class ITSpannerTableTailerStressTest {
         .toStringArray(randomStrings(100))
         .set("ColStringMaxArray")
         .toStringArray(randomStrings(100))
+        .set("ColJsonArray")
+        .toJsonArray(randomJsonArray(100))
         .set("ColBytesArray")
         .toBytesArray(randomBytesArray(100))
         .set("ColBytesMaxArray")
@@ -306,6 +313,13 @@ public class ITSpannerTableTailerStressTest {
     final byte[] stringBytes = new byte[length];
     rnd.nextBytes(stringBytes);
     return Base64.encodeBase64String(stringBytes);
+  }
+
+  static String randomJson(int maxLength) {
+    final int length = rnd.nextInt(maxLength / 2) + 1;
+    final byte[] stringBytes = new byte[length];
+    rnd.nextBytes(stringBytes);
+    return String.format("{\"key\": \"%s\"}", BaseEncoding.base64().encode(stringBytes));
   }
 
   static ByteArray randomBytes(int maxLength) {
@@ -341,6 +355,11 @@ public class ITSpannerTableTailerStressTest {
   static Iterable<String> randomStrings(int maxLength) {
     final int length = rnd.nextInt(maxLength) + 1;
     return IntStream.range(0, length).mapToObj(i -> randomString(100)).collect(Collectors.toList());
+  }
+
+  static Iterable<String> randomJsonArray(int maxLength) {
+    final int length = rnd.nextInt(maxLength) + 1;
+    return IntStream.range(0, length).mapToObj(i -> randomJson(100)).collect(Collectors.toList());
   }
 
   static Iterable<ByteArray> randomBytesArray(int maxLength) {
@@ -441,6 +460,16 @@ public class ITSpannerTableTailerStressTest {
     }
 
     @Override
+    public String getJson(int columnIndex) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String getJson(String columnName) {
+      return values.get(columnName).getJson();
+    }
+
+    @Override
     public ByteArray getBytes(int columnIndex) {
       throw new UnsupportedOperationException();
     }
@@ -478,6 +507,16 @@ public class ITSpannerTableTailerStressTest {
     @Override
     public BigDecimal getBigDecimal(String columnName) {
       return values.get(columnName).getNumeric();
+    }
+
+    @Override
+    public Value getValue(int columnIndex) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Value getValue(String columnName) {
+      return values.get(columnName);
     }
 
     @Override
@@ -548,6 +587,16 @@ public class ITSpannerTableTailerStressTest {
     @Override
     public List<String> getStringList(String columnName) {
       return values.get(columnName).getStringArray();
+    }
+
+    @Override
+    public List<String> getJsonList(int columnIndex) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<String> getJsonList(String columnName) {
+      return values.get(columnName).getJsonArray();
     }
 
     @Override
