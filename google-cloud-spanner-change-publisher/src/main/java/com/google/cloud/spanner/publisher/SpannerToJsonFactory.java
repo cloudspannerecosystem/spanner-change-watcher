@@ -69,6 +69,9 @@ public class SpannerToJsonFactory implements ConverterFactory {
                 case INT64:
                   row.getLongList(i).stream().forEach(l -> arrayObject.add(l));
                   break;
+                case JSON:
+                  row.getJsonList(i).stream().forEach(s -> arrayObject.add(s));
+                  break;
                 case STRING:
                   row.getStringList(i).stream().forEach(s -> arrayObject.add(s));
                   break;
@@ -107,6 +110,9 @@ public class SpannerToJsonFactory implements ConverterFactory {
               break;
             case INT64:
               obj.addProperty(columnName, row.getLong(i));
+              break;
+            case JSON:
+              obj.addProperty(columnName, row.getJson(i));
               break;
             case STRING:
               obj.addProperty(columnName, row.getString(i));

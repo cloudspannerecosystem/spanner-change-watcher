@@ -131,6 +131,11 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
     }
 
     @Override
+    public CommitResponse getCommitResponse() {
+      return runner.getCommitResponse();
+    }
+
+    @Override
     public TransactionRunner allowNestedTransaction() {
       return runner.allowNestedTransaction();
     }
@@ -174,6 +179,11 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
     }
 
     @Override
+    public CommitResponse getCommitResponse() {
+      return manager.getCommitResponse();
+    }
+
+    @Override
     public TransactionState getState() {
       return manager.getState();
     }
@@ -208,6 +218,11 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
     @Override
     public ApiFuture<Timestamp> getCommitTimestamp() {
       return runner.getCommitTimestamp();
+    }
+
+    @Override
+    public ApiFuture<CommitResponse> getCommitResponse() {
+      return runner.getCommitResponse();
     }
   }
 
@@ -273,6 +288,11 @@ public class DatabaseClientWithChangeSets implements DatabaseClient {
     @Override
     public ApiFuture<Void> closeAsync() {
       return manager.closeAsync();
+    }
+
+    @Override
+    public ApiFuture<CommitResponse> getCommitResponse() {
+      return manager.getCommitResponse();
     }
   }
 

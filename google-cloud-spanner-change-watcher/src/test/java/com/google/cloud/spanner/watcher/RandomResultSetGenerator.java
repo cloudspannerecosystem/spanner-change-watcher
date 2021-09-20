@@ -20,6 +20,7 @@ import com.google.api.client.util.Base64;
 import com.google.cloud.Date;
 import com.google.cloud.Timestamp;
 import com.google.common.base.Preconditions;
+import com.google.common.io.BaseEncoding;
 import com.google.protobuf.ListValue;
 import com.google.protobuf.NullValue;
 import com.google.protobuf.Value;
@@ -45,6 +46,7 @@ public class RandomResultSetGenerator {
         Type.newBuilder().setCode(TypeCode.INT64).build(),
         Type.newBuilder().setCode(TypeCode.FLOAT64).build(),
         Type.newBuilder().setCode(TypeCode.STRING).build(),
+        Type.newBuilder().setCode(TypeCode.JSON).build(),
         Type.newBuilder().setCode(TypeCode.BYTES).build(),
         Type.newBuilder().setCode(TypeCode.DATE).build(),
         Type.newBuilder().setCode(TypeCode.TIMESTAMP).build(),
@@ -64,6 +66,10 @@ public class RandomResultSetGenerator {
         Type.newBuilder()
             .setCode(TypeCode.ARRAY)
             .setArrayElementType(Type.newBuilder().setCode(TypeCode.STRING))
+            .build(),
+        Type.newBuilder()
+            .setCode(TypeCode.ARRAY)
+            .setArrayElementType(Type.newBuilder().setCode(TypeCode.JSON))
             .build(),
         Type.newBuilder()
             .setCode(TypeCode.ARRAY)
@@ -228,6 +234,12 @@ public class RandomResultSetGenerator {
           byte[] bytes = new byte[random.nextInt(200)];
           random.nextBytes(bytes);
           builder.setStringValue(Base64.encodeBase64String(bytes));
+          break;
+        case JSON:
+          byte[] b = new byte[random.nextInt(200)];
+          random.nextBytes(b);
+          String value = BaseEncoding.base64().encode(b);
+          builder.setStringValue(String.format("{\"key\":\"%s\"}", value));
           break;
         case DATE:
           Date date =

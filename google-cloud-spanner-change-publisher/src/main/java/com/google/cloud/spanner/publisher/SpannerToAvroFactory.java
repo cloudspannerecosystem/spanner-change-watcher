@@ -302,6 +302,38 @@ public class SpannerToAvroFactory implements ConverterFactory {
                       .noDefault();
                 }
                 break;
+              case "JSON":
+                logger.log(Level.FINE, "Made ARRAY<JSON>");
+                if (nullable) {
+                  avroSchemaBuilder
+                          .name(name)
+                          .type()
+                          .unionOf()
+                          .nullType()
+                          .and()
+                          .array()
+                          .items()
+                          .unionOf()
+                          .nullType()
+                          .and()
+                          .stringType()
+                          .endUnion()
+                          .endUnion()
+                          .noDefault();
+                } else {
+                  avroSchemaBuilder
+                          .name(name)
+                          .type()
+                          .array()
+                          .items()
+                          .unionOf()
+                          .nullType()
+                          .and()
+                          .stringType()
+                          .endUnion()
+                          .noDefault();
+                }
+                break;
               case "STRING":
                 logger.log(Level.FINE, "Made ARRAY<STRING>");
                 if (nullable) {
@@ -443,6 +475,14 @@ public class SpannerToAvroFactory implements ConverterFactory {
               avroSchemaBuilder.name(name).type().longType().noDefault();
             }
             break;
+          case "JSON":
+            logger.log(Level.FINE, "Made JSON");
+            if (nullable) {
+              avroSchemaBuilder.name(name).type().optional().stringType();
+            } else {
+              avroSchemaBuilder.name(name).type().stringType().noDefault();
+            }
+            break;
           case "STRING":
             logger.log(Level.FINE, "Made STRING");
             if (nullable) {
@@ -539,6 +579,10 @@ public class SpannerToAvroFactory implements ConverterFactory {
                   logger.log(Level.FINE, "Put ARRAY<INT64>");
                   record.put(x, row.getLongList(x));
                   break;
+                case "JSON":
+                  logger.log(Level.FINE, "Put ARRAY<JSON>");
+                  record.put(x, row.getJsonList(x));
+                  break;
                 case "STRING":
                   logger.log(Level.FINE, "Put ARRAY<STRING>");
                   record.put(x, row.getStringList(x));
@@ -576,6 +620,10 @@ public class SpannerToAvroFactory implements ConverterFactory {
             case "INT64":
               logger.log(Level.FINE, "Put INT64");
               record.put(x, row.getLong(x));
+              break;
+            case "JSON":
+              logger.log(Level.FINE, "Put JSON");
+              record.put(x, row.getJson(x));
               break;
             case "STRING":
               logger.log(Level.FINE, "Put STRING");
