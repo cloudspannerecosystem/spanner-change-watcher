@@ -183,6 +183,9 @@ public class SpannerUtils {
         case INT64:
           kb.append(rs.getLong(pkCol));
           break;
+        case NUMERIC:
+          kb.append(rs.getBigDecimal(pkCol));
+          break;
         case STRING:
           kb.append(rs.getString(pkCol));
           break;
