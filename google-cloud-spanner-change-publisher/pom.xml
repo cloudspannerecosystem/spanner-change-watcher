@@ -80,12 +80,10 @@
     <dependency>
       <groupId>com.google.api.grpc</groupId>
       <artifactId>grpc-google-cloud-spanner-v1</artifactId>
-<!--      <scope>test</scope>-->
     </dependency>
     <dependency>
       <groupId>com.google.api.grpc</groupId>
       <artifactId>grpc-google-cloud-pubsub-v1</artifactId>
-<!--      <scope>test</scope>-->
     </dependency>
     <dependency>
       <groupId>com.google.api</groupId>
@@ -153,10 +151,6 @@
                   <resource>META-INF/services</resource>
                   <file>io.grpc.LoadBalancerProvider</file>
                 </transformer>
-<!--                <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">-->
-<!--                  <resource>META-INF/services</resource>-->
-<!--                  <file>io.grpc.NameResolverProvider</file>-->
-<!--                </transformer>-->
               </transformers>
             </configuration>
           </execution>
