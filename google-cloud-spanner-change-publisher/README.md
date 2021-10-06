@@ -88,7 +88,7 @@ publish changes from a Spanner database to Pubsub. Follow these steps to build
 and start the application:
 
 1. Build the application including all dependencies by executing `mvn package` in the root of this project. This will generate the file `spanner-publisher.jar` in the target folder.
-1. Configure the required properties to specify the Spanner database to monitor and the Pubsub topic to publish to. The configuration can be specified using system properties or a properties file. The below example uses the minimum set of system properties that is needed to monitor all tables in a database and publish the changes to a separate Pubsub topic per table.
+1. Configure the required properties to specify the Spanner database to monitor and the Pubsub topic to publish to. The configuration can be specified using system properties or a properties file. The below example uses the minimum set of system properties that is needed to monitor all tables in a database and publish the changes to a separate Pubsub topic per table. See the scep.properties.example file in the resources folder for a full list of properties. You can also copy this file and use it as a starting point for your own properties file.
 1. Start the application using the command `java -Dscep.spanner.instance=my-instance -Dscep.spanner.database=my-database -Dscep.pubsub.topicNameFormat=spanner-update-%table% -jar target/spanner-publisher.jar`.
 
 ### Configuration
@@ -141,6 +141,46 @@ scep.pubsub.converterFactory=com.google.cloud.spanner.publisher.SpannerToJsonFac
 The `spanner-publisher.jar` contains a complete example of all possible
 parameters in the root of the .jar named `scep.properties.example`.
 
+### Run in Demo Mode
+The standalone application also has a simple demo mode that can be used to test the application.
+The demo mode only works with the emulators of Spanner and PubSub and is only intended for testing.
+
+Follow these steps to execute the application in demo mode:
+1. Build and install all dependencies:
+
+```shell
+cd spanner-change-watcher
+mvn clean install -DskipTests
+```
+
+2. Copy the `scep.properties.example` file from the google-cloud-spanner-change-publisher/src/main/resources folder to the root folder of the google-cloud-spanner-change-publisher project and name `scep.properties`.
+   Change the value of `scep.demoMode` from false to true.
+
+```shell
+cd google-cloud-spanner-change-publisher
+cp src/main/resources/scep.properties.example ./scep.properties
+sed -i "" 's/scep.demoMode=false/scep.demoMode=true/' scep.properties
+```
+
+3. Execute the following commands to start and configure the Spanner and PubSub emulators:
+
+```shell
+(gcloud beta emulators spanner start)&
+(gcloud beta emulators pubsub start --project=my-pubsub-project --host-port=localhost:8085)&
+export SPANNER_EMULATOR_HOST=localhost:9010
+export PUBSUB_EMULATOR_HOST=localhost:8085
+```
+
+4. Package and run the application in demo mode (execute in the google-cloud-spanner-change-publisher folder):
+
+```shell
+mvn package -DskipTests
+java -jar target/spanner-publisher.jar
+```
+
+The application will automatically connect to the emulators that you have started and create a couple
+of Spanner tables, PubSub topics and a PubSub subscriber. The application should print two changes
+to the console.
 
 ## Subscribe to Changes from Pubsub
 Any application can subscribe to the changes that are published to Pubsub and
