@@ -18,6 +18,7 @@ package com.google.cloud.spanner.publisher;
 
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.NoCredentials;
 import com.google.cloud.ServiceOptions;
 import com.google.cloud.spanner.DatabaseId;
 import com.google.common.base.MoreObjects;
@@ -33,7 +34,10 @@ import org.threeten.bp.Duration;
 
 class Configuration {
   private static final String SCEP_PREFIX = "scep";
+  private static final String SPANNER_EMULATOR_HOST_ENV_VAR = "SPANNER_EMULATOR_HOST";
+  private static final String PUBSUB_EMULATOR_HOST_ENV_VAR = "PUBSUB_EMULATOR_HOST";
 
+  private boolean demoMode;
   private long maxWaitForShutdownSeconds;
 
   // Tailer settings.
@@ -53,6 +57,10 @@ class Configuration {
   private boolean createTopics;
   private String converterFactory;
 
+  boolean isDemoMode() {
+    return demoMode;
+  }
+
   Long getMaxWaitForShutdownSeconds() {
     return maxWaitForShutdownSeconds;
   }
@@ -65,7 +73,14 @@ class Configuration {
     return spannerProject != null ? spannerProject : ServiceOptions.getDefaultProjectId();
   }
 
+  static boolean isSpannerEmulator() {
+    return System.getenv(SPANNER_EMULATOR_HOST_ENV_VAR) != null;
+  }
+
   Credentials getSpannerCredentials() throws IOException {
+    if (isSpannerEmulator()) {
+      return NoCredentials.getInstance();
+    }
     return spannerCredentials != null
         ? spannerCredentials
         : GoogleCredentials.getApplicationDefault();
@@ -145,7 +160,18 @@ class Configuration {
     return pubsubProject != null ? pubsubProject : ServiceOptions.getDefaultProjectId();
   }
 
+  static boolean isPubsubEmulator() {
+    return System.getenv(PUBSUB_EMULATOR_HOST_ENV_VAR) != null;
+  }
+
+  static String getPubsubEmulatorEndpoint() {
+    return System.getenv(PUBSUB_EMULATOR_HOST_ENV_VAR);
+  }
+
   Credentials getPubsubCredentials() throws IOException {
+    if (isPubsubEmulator()) {
+      return NoCredentials.getInstance();
+    }
     return pubsubCredentials != null
         ? pubsubCredentials
         : GoogleCredentials.getApplicationDefault();
@@ -177,6 +203,7 @@ class Configuration {
     Configuration config = new Configuration();
 
     // General settings.
+    config.demoMode = Boolean.valueOf(MoreObjects.firstNonNull(getSystemOrDefaultProperty("demoMode", defaults), "false"));
     config.maxWaitForShutdownSeconds =
         Long.valueOf(
             MoreObjects.firstNonNull(
@@ -187,7 +214,7 @@ class Configuration {
     config.spannerInstance = getRequiredSystemOrDefaultProperty("spanner.instance", defaults);
     config.spannerDatabase = getRequiredSystemOrDefaultProperty("spanner.database", defaults);
     String creds = getSystemOrDefaultProperty("spanner.credentials", defaults);
-    if (!Strings.isNullOrEmpty(creds)) {
+    if (!config.demoMode && !Strings.isNullOrEmpty(creds)) {
       config.spannerCredentials = GoogleCredentials.fromStream(new FileInputStream(creds));
     }
     config.pollInterval =
@@ -243,7 +270,7 @@ class Configuration {
     // Publisher settings.
     config.pubsubProject = getSystemOrDefaultProperty("pubsub.project", defaults);
     creds = getSystemOrDefaultProperty("pubsub.credentials", defaults);
-    if (!Strings.isNullOrEmpty(creds)) {
+    if (!config.demoMode && !Strings.isNullOrEmpty(creds)) {
       config.pubsubCredentials = GoogleCredentials.fromStream(new FileInputStream(creds));
     }
     config.topicNameFormat = getSystemOrDefaultProperty("pubsub.topicNameFormat", defaults);

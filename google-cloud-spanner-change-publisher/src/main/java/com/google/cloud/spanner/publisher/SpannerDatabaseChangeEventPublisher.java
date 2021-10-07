@@ -24,6 +24,7 @@ import com.google.api.gax.grpc.GrpcTransportChannel;
 import com.google.api.gax.rpc.FixedTransportChannelProvider;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.NoCredentials;
 import com.google.cloud.Timestamp;
 import com.google.cloud.pubsub.v1.Publisher;
 import com.google.cloud.pubsub.v1.stub.PublisherStubSettings;
@@ -230,9 +231,15 @@ public class SpannerDatabaseChangeEventPublisher extends AbstractApiService impl
             : builder.startStopExecutor;
     this.listeners = ImmutableList.copyOf(builder.listeners);
     this.isOwnedExecutor = builder.startStopExecutor == null;
-    this.credentials = builder.credentials;
-    this.endpoint = builder.endpoint;
-    this.usePlainText = builder.usePlainText;
+    if (Configuration.isPubsubEmulator()) {
+      this.endpoint = Configuration.getPubsubEmulatorEndpoint();
+      this.credentials = NoCredentials.getInstance();
+      this.usePlainText = true;
+    } else {
+      this.endpoint = builder.endpoint;
+      this.credentials = builder.credentials;
+      this.usePlainText = builder.usePlainText;
+    }
     this.addListener(
         new Listener() {
           @Override

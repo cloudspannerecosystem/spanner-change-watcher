@@ -74,12 +74,10 @@
     <dependency>
       <groupId>com.google.api.grpc</groupId>
       <artifactId>grpc-google-cloud-spanner-v1</artifactId>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.google.api.grpc</groupId>
       <artifactId>grpc-google-cloud-pubsub-v1</artifactId>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.google.api</groupId>
@@ -124,6 +122,16 @@
                   <exclude>junit:*</exclude>
                 </excludes>
               </artifactSet>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                  </excludes>
+                </filter>
+              </filters>
               <transformers>
                 <transformer
                   implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
@@ -132,6 +140,10 @@
                 <transformer
                   implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                   <file>scep.properties.example</file>
+                </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                  <resource>META-INF/services</resource>
+                  <file>io.grpc.LoadBalancerProvider</file>
                 </transformer>
               </transformers>
             </configuration>

@@ -242,8 +242,8 @@ public class MainTest {
     assertThat(config.getSpannerProject()).isEqualTo("my-spanner-project");
     assertThat(config.getDatabaseId())
         .isEqualTo(DatabaseId.of("my-spanner-project", "my-instance", "my-database"));
-    assertThat(config.isAllTables()).isFalse();
-    assertThat(config.getIncludedTables()).asList().containsExactly("TABLE1", "TABLE2", "TABLE3");
+    assertThat(config.isAllTables()).isTrue();
+    assertThat(config.getIncludedTables()).isEmpty();
     assertThat(config.getPollInterval()).isEqualTo(Duration.ofMillis(500L));
     assertThat(config.getPubsubProject()).isEqualTo("my-pubsub-project");
     assertThat(config.getTopicNameFormat()).isEqualTo("spanner-update-%database%-%table%");

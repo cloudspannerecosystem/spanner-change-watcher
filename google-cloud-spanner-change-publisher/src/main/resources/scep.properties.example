@@ -2,6 +2,9 @@
 # ----- GENERAL SETTINGS ----- #
 # General settings for Spanner Change Event Publisher (scep)
 
+# Set demo mode to true to execute a quick demo on a Spanner and PubSub emulator.
+scep.demoMode=false
+
 # Maximum time that the JVM should wait for the publisher to shutdown when the JVM is shutting
 # down. When the JVM is shutdown, scep will stop the Pubsub publisher and the Spanner change
 # watcher and close any resources in use. This should normally finish within a couple of seconds.
@@ -37,7 +40,7 @@ scep.spanner.credentials=/path/to/spanner-credentials.json
 
 # Turn watching all tables in the database for changes on/off.
 
-scep.spanner.allTables=false
+scep.spanner.allTables=true
 
 
 # A list of tables that should be excluded from monitoring. This option may only be used in
@@ -50,7 +53,7 @@ scep.spanner.allTables=false
 # A list of tables that should be included in the monitoring. This option may only be used in
 # combination with the option allTables=false.
 
-scep.spanner.includedTables=TABLE1,TABLE2,TABLE3
+#scep.spanner.includedTables=TABLE1,TABLE2,TABLE3
 
 
 # The poll interval of the Spanner tailer. The interval should be given in ISO-8601 period format.
