@@ -83,13 +83,14 @@ Take a look at [Samples.java](../samples/spanner-change-publisher-samples/src/ma
 for additional examples of more advanced use cases.
 
 ## Use as a Standalone Application
+Add `credentials.json` & `scep.properties` files in `/google-cloud-spanner-change-publisher`
 Spanner Change Event Publisher can be run as a standalone application to
 publish changes from a Spanner database to Pubsub. Follow these steps to build
 and start the application:
 
 1. Build the application including all dependencies by executing `mvn package` in the root of this project. This will generate the file `spanner-publisher.jar` in the target folder.
 1. Configure the required properties to specify the Spanner database to monitor and the Pubsub topic to publish to. The configuration can be specified using system properties or a properties file. The below example uses the minimum set of system properties that is needed to monitor all tables in a database and publish the changes to a separate Pubsub topic per table. See the scep.properties.example file in the resources folder for a full list of properties. You can also copy this file and use it as a starting point for your own properties file.
-1. Start the application using the command `java -Dscep.spanner.instance=my-instance -Dscep.spanner.database=my-database -Dscep.pubsub.topicNameFormat=spanner-update-%table% -jar target/spanner-publisher.jar`.
+1. Start the application using the command `java -Dscep.properties=scep.properties -jar target/spanner-publisher.jar`.
 
 ### Configuration
 Additional configuration can be specified using system properties or a

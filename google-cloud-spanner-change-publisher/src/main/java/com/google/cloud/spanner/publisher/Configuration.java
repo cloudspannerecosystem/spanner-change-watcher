@@ -37,7 +37,6 @@ class Configuration {
   private static final String SPANNER_EMULATOR_HOST_ENV_VAR = "SPANNER_EMULATOR_HOST";
   private static final String PUBSUB_EMULATOR_HOST_ENV_VAR = "PUBSUB_EMULATOR_HOST";
 
-  private boolean demoMode;
   private long maxWaitForShutdownSeconds;
 
   // Tailer settings.
@@ -56,10 +55,6 @@ class Configuration {
   private String topicNameFormat;
   private boolean createTopics;
   private String converterFactory;
-
-  boolean isDemoMode() {
-    return demoMode;
-  }
 
   Long getMaxWaitForShutdownSeconds() {
     return maxWaitForShutdownSeconds;
@@ -203,7 +198,6 @@ class Configuration {
     Configuration config = new Configuration();
 
     // General settings.
-    config.demoMode = Boolean.valueOf(MoreObjects.firstNonNull(getSystemOrDefaultProperty("demoMode", defaults), "false"));
     config.maxWaitForShutdownSeconds =
         Long.valueOf(
             MoreObjects.firstNonNull(
@@ -214,7 +208,7 @@ class Configuration {
     config.spannerInstance = getRequiredSystemOrDefaultProperty("spanner.instance", defaults);
     config.spannerDatabase = getRequiredSystemOrDefaultProperty("spanner.database", defaults);
     String creds = getSystemOrDefaultProperty("spanner.credentials", defaults);
-    if (!config.demoMode && !Strings.isNullOrEmpty(creds)) {
+    if (!Strings.isNullOrEmpty(creds)) {
       config.spannerCredentials = GoogleCredentials.fromStream(new FileInputStream(creds));
     }
     config.pollInterval =
@@ -270,7 +264,7 @@ class Configuration {
     // Publisher settings.
     config.pubsubProject = getSystemOrDefaultProperty("pubsub.project", defaults);
     creds = getSystemOrDefaultProperty("pubsub.credentials", defaults);
-    if (!config.demoMode && !Strings.isNullOrEmpty(creds)) {
+    if (!Strings.isNullOrEmpty(creds)) {
       config.pubsubCredentials = GoogleCredentials.fromStream(new FileInputStream(creds));
     }
     config.topicNameFormat = getSystemOrDefaultProperty("pubsub.topicNameFormat", defaults);

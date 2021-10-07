@@ -4,3 +4,7 @@ target
 .classpath
 .idea
 .DS_Store
+# Service Account Credentials
+credentials.json
+# Properties Config File
+scep.properties

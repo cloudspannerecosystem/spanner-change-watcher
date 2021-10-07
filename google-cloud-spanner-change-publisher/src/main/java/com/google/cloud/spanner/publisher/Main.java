@@ -73,9 +73,6 @@ public class Main {
       config = Configuration.createConfiguration(readPropertiesFromFile());
       logger.log(Level.INFO, "Configuration Spanner client");
       spanner = createSpannerOptions(config).getService();
-      if (config.isDemoMode()) {
-        Demo.createSpannerDemoDatabase(config, spanner);
-      }
       logger.log(Level.INFO, "Creating Spanner change watcher");
       SpannerDatabaseChangeWatcher watcher = createWatcher(config, spanner);
 
@@ -125,17 +122,6 @@ public class Main {
     logger.info("Waiting for Spanner Change Event Publisher to start");
     publisher.awaitRunning();
     logger.info("Spanner Change Event Publisher started");
-
-    if (config.isDemoMode()) {
-      Demo.createDemoSubscriptions(config);
-      logger.info("Created demo subscriptions on PubSub Emulator");
-      Subscriber subscriber = PubsubEmulatorUtil.createDemoSubscriber(config, "Singers", logger);
-      subscriber.startAsync().awaitRunning();
-      logger.info("Created subscriber, waiting for messages...");
-      // Execute some demo mutations. This should cause a number of messages to be printed to the
-      // console.
-      Demo.executeDemoMutations(config, spanner);
-    }
 
     publisher.awaitTerminated();
     logger.info("Spanner Change Event Publisher stopped");
@@ -209,11 +195,7 @@ public class Main {
                     config.getPubsubProject(), config.getTopicNameFormat()))
             .setCredentials(config.getPubsubCredentials())
             .setConverterFactory(config.getConverterFactory())
-            .setCreateTopicsIfNotExist(config.createTopics() || config.isDemoMode());
-    if (config.isDemoMode()) {
-      builder.usePlainText();
-    }
-
+            .setCreateTopicsIfNotExist(config.createTopics());
     publisher = builder.build();
     return publisher;
   }
