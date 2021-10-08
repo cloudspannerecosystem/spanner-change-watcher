@@ -71,7 +71,11 @@ class PubsubHelper implements AutoCloseable {
 
   void checkExists(String topicName, boolean createIfNotExists) throws Exception {
     try {
-      client.getTopic(topicName);
+      try {
+        client.createTopic(topicName);
+      }catch(Exception e){
+        client.getTopic(topicName);
+      }
     } catch (ApiException e) {
       if (e.getStatusCode().getCode() == Code.NOT_FOUND && createIfNotExists) {
         logger.log(Level.INFO, "Creating topic {0}", topicName);
