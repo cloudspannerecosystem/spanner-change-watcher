@@ -17,6 +17,7 @@
 package com.google.cloud.spanner.watcher.sample.it;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertTrue;
 
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Database;
@@ -58,28 +59,26 @@ public class ITSamplesTest {
   private static final Logger logger = Logger.getLogger(ITSamplesTest.class.getName());
   private static final ITSpannerEnv env = new ITSpannerEnv();
   private static DatabaseId databaseId;
-  private static Database database;
   private static DatabaseClient client;
-  private static ExecutorService executor = Executors.newSingleThreadExecutor();
+  private static final ExecutorService executor = Executors.newSingleThreadExecutor();
   private CountDownLatch systemExitLatch;
 
   @BeforeClass
   public static void setup() throws Exception {
     SpannerTestHelper.setupSpanner(env);
-    database =
-        env.createTestDb(
-            ImmutableList.of(
-                "CREATE TABLE NUMBERS1 (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
-                "CREATE TABLE NUMBERS2 (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
-                "CREATE TABLE MY_TABLE (ID INT64, NAME STRING(MAX), SHARD_ID STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
-                "CREATE INDEX IDX_MY_TABLE_SHARDING ON MY_TABLE (SHARD_ID, LAST_MODIFIED DESC)",
-                "CREATE TABLE MY_TABLE_NULLABLE_SHARD (ID INT64, NAME STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true), PROCESSED BOOL, SHARD_ID INT64 AS (CASE WHEN PROCESSED THEN NULL ELSE MOD(FARM_FINGERPRINT(NAME), 19) END) STORED) PRIMARY KEY (ID)",
-                "CREATE NULL_FILTERED INDEX IDX_MY_TABLE_NULLABLE_SHARDING ON MY_TABLE_NULLABLE_SHARD (SHARD_ID, LAST_MODIFIED DESC)",
-                "CREATE TABLE MULTIPLE_COMMIT_TS (ID INT64, NAME STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true), LAST_BATCH_JOB TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
-                "CREATE TABLE NUMBERS_WITHOUT_COMMIT_TIMESTAMP (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP) PRIMARY KEY (ID)",
-                "CREATE TABLE CHANGE_SETS (CHANGE_SET_ID STRING(MAX), COMMIT_TIMESTAMP TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (CHANGE_SET_ID)",
-                "CREATE TABLE DATA_TABLE (ID INT64, NAME STRING(MAX), CHANGE_SET_ID STRING(MAX)) PRIMARY KEY (ID)",
-                "CREATE INDEX IDX_DATA_TABLE_CHANGE_SET_ID ON DATA_TABLE (CHANGE_SET_ID)"));
+    Database database = env.createTestDb(
+        ImmutableList.of(
+            "CREATE TABLE NUMBERS1 (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
+            "CREATE TABLE NUMBERS2 (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
+            "CREATE TABLE MY_TABLE (ID INT64, NAME STRING(MAX), SHARD_ID STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
+            "CREATE INDEX IDX_MY_TABLE_SHARDING ON MY_TABLE (SHARD_ID, LAST_MODIFIED DESC)",
+            "CREATE TABLE MY_TABLE_NULLABLE_SHARD (ID INT64, NAME STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true), PROCESSED BOOL, SHARD_ID INT64 AS (CASE WHEN PROCESSED THEN NULL ELSE MOD(FARM_FINGERPRINT(NAME), 19) END) STORED) PRIMARY KEY (ID)",
+            "CREATE NULL_FILTERED INDEX IDX_MY_TABLE_NULLABLE_SHARDING ON MY_TABLE_NULLABLE_SHARD (SHARD_ID, LAST_MODIFIED DESC)",
+            "CREATE TABLE MULTIPLE_COMMIT_TS (ID INT64, NAME STRING(MAX), LAST_MODIFIED TIMESTAMP OPTIONS (allow_commit_timestamp=true), LAST_BATCH_JOB TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (ID)",
+            "CREATE TABLE NUMBERS_WITHOUT_COMMIT_TIMESTAMP (ID INT64 NOT NULL, NAME STRING(100), LAST_MODIFIED TIMESTAMP) PRIMARY KEY (ID)",
+            "CREATE TABLE CHANGE_SETS (CHANGE_SET_ID STRING(MAX), COMMIT_TIMESTAMP TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (CHANGE_SET_ID)",
+            "CREATE TABLE DATA_TABLE (ID INT64, NAME STRING(MAX), CHANGE_SET_ID STRING(MAX)) PRIMARY KEY (ID)",
+            "CREATE INDEX IDX_DATA_TABLE_CHANGE_SET_ID ON DATA_TABLE (CHANGE_SET_ID)"));
     databaseId = database.getId();
     client = env.getSpanner().getDatabaseClient(databaseId);
     logger.info(String.format("Created database %s", database.getId().toString()));
@@ -107,7 +106,7 @@ public class ITSamplesTest {
   }
 
   private interface SampleRunnable {
-    public void run() throws InterruptedException, IOException;
+    void run() throws InterruptedException, IOException;
   }
 
   private final class TestSecurityManager extends SecurityManager {
@@ -123,8 +122,7 @@ public class ITSamplesTest {
     public void checkPermission(Permission perm) {}
   }
 
-  private Future<String> runSample(SampleRunnable example, CountDownLatch startedLatch)
-      throws InterruptedException, IOException {
+  private Future<String> runSample(SampleRunnable example, CountDownLatch startedLatch) {
     return executor.submit(
         new Callable<String>() {
           @Override
@@ -134,7 +132,7 @@ public class ITSamplesTest {
             PrintStream out =
                 new PrintStream(bout) {
                   @Override
-                  public void write(byte buf[], int off, int len) {
+                  public void write(byte[] buf, int off, int len) {
                     super.write(buf, off, len);
                     if (bout.toString().contains("Started change watcher")) {
                       startedLatch.countDown();
@@ -241,7 +239,7 @@ public class ITSamplesTest {
                   "NUMBERS1");
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     Timestamp commitTs =
         client.write(
             insertOrUpdateNumbers("NUMBERS1", 0, NUMBER_NAMES.length, Value.COMMIT_TIMESTAMP));
@@ -265,7 +263,7 @@ public class ITSamplesTest {
                   databaseId.getDatabase());
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     // First write to the table without a commit timestamp. These changes should not be picked up.
     client.write(
         insertOrUpdateNumbers(
@@ -303,7 +301,7 @@ public class ITSamplesTest {
                   "NUMBERS2");
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     Timestamp commitTs1 =
         client.write(insertOrUpdateNumbers("NUMBERS1", 0, 1, Value.COMMIT_TIMESTAMP));
     Timestamp commitTs2 =
@@ -336,7 +334,7 @@ public class ITSamplesTest {
                   "NUMBERS_WITHOUT_COMMIT_TIMESTAMP");
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     // First write to the excluded table. These changes should not be picked up.
     client.write(insertOrUpdateNumbers("NUMBERS1", 0, NUMBER_NAMES.length, Value.COMMIT_TIMESTAMP));
     Timestamp commitTs =
@@ -364,7 +362,7 @@ public class ITSamplesTest {
                   "NUMBERS1");
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     Timestamp commitTs =
         client.write(
             insertOrUpdateNumbers("NUMBERS1", 0, NUMBER_NAMES.length, Value.COMMIT_TIMESTAMP));
@@ -399,7 +397,7 @@ public class ITSamplesTest {
                 databaseId.getDatabase());
           },
           latch);
-      latch.await(30L, TimeUnit.SECONDS);
+      assertTrue(latch.await(300L, TimeUnit.SECONDS));
       // Drop one of the tables that is being watched.
       Logger logger = Logger.getLogger(SpannerTableTailer.class.getName());
       Level level = logger.getLevel();
@@ -448,7 +446,7 @@ public class ITSamplesTest {
                   "MY_LAST_SEEN_COMMIT_TIMESTAMPS");
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     Timestamp[] timestamps = new Timestamp[NUMBER_NAMES.length];
     for (int i = 0; i < NUMBER_NAMES.length; i++) {
       timestamps[i] =
@@ -476,7 +474,7 @@ public class ITSamplesTest {
                   "NUMBERS1");
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     Timestamp[] timestamps = new Timestamp[NUMBER_NAMES.length];
     for (int i = 0; i < NUMBER_NAMES.length; i++) {
       timestamps[i] =
@@ -503,7 +501,7 @@ public class ITSamplesTest {
                   databaseId.getDatabase());
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     Timestamp commitTs1 =
         client.write(insertOrUpdateNumbers("NUMBERS1", 0, 1, Value.COMMIT_TIMESTAMP));
     Timestamp commitTs2 =
@@ -535,7 +533,7 @@ public class ITSamplesTest {
                   "MY_TABLE");
             },
             latch);
-    latch.await(120L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     client.write(
         ImmutableList.of(
             Mutation.newInsertBuilder("MY_TABLE")
@@ -588,7 +586,7 @@ public class ITSamplesTest {
                   "IDX_MY_TABLE_NULLABLE_SHARDING");
             },
             latch);
-    latch.await(120L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     client.write(
         ImmutableList.of(
             Mutation.newInsertBuilder("MY_TABLE_NULLABLE_SHARD")
@@ -634,7 +632,7 @@ public class ITSamplesTest {
                   "MY_TABLE");
             },
             latch);
-    latch.await(120L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     String res = out.get(120L, TimeUnit.SECONDS);
     assertThat(res).contains("1, Name 1,");
     assertThat(res).contains("2, Name 2,");
@@ -653,7 +651,7 @@ public class ITSamplesTest {
                   databaseId.getDatabase());
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     // First do a write using the commit timestamp column that should not be picked up.
     Timestamp ts1 =
         client.write(
@@ -736,7 +734,7 @@ public class ITSamplesTest {
                   databaseId.getDatabase());
             },
             latch);
-    latch.await(30L, TimeUnit.SECONDS);
+    assertTrue(latch.await(300L, TimeUnit.SECONDS));
     // The sample itself already writes 3 changes.
     String res = out.get(60L, TimeUnit.SECONDS);
     TableId table = TableId.of(databaseId, "DATA_TABLE");
