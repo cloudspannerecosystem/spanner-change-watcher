@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.google.cloudspannerecosystem</groupId>
   <artifactId>spanner-change-watcher</artifactId>
-  <version>1.1.0</version>
+  <version>1.2.0</version>
   <name>Google Cloud Spanner Change Watcher Parent</name>
   <description>Google Cloud Spanner Change Watcher and Publisher is a framework that emits events when a row has been changed in a Cloud Spanner database. These row change events can be captured and processed in-process as part of a user application, or they can be published to Google Cloud Pubsub for consumption by any other application.</description>
   <url>https://github.com/cloudspannerecosystem/spanner-change-watcher</url>
@@ -68,7 +68,7 @@
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-watcher</artifactId>
-        <version>1.1.0</version>
+        <version>1.2.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.conscrypt</groupId>
@@ -79,12 +79,12 @@
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-publisher</artifactId>
-        <version>1.1.0</version>
+        <version>1.2.0</version>
       </dependency>
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-archiver</artifactId>
-        <version>1.1.0</version>
+        <version>1.2.0</version>
       </dependency>
       
       <dependency>
