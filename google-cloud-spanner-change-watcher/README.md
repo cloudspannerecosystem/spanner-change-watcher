@@ -16,7 +16,7 @@ or entire databases. Add the dependency to your project:
 <dependency>
   <groupId>com.google.cloudspannerecosystem</groupId>
   <artifactId>google-cloud-spanner-change-watcher</artifactId>
-  <version>1.2.0</version>
+  <version>1.2.1</version>
 </dependency>
 ```
 
