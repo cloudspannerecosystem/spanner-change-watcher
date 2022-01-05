@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.google.cloudspannerecosystem</groupId>
   <artifactId>spanner-change-watcher</artifactId>
-  <version>1.2.0</version>
+  <version>1.2.1</version>
   <name>Google Cloud Spanner Change Watcher Parent</name>
   <description>Google Cloud Spanner Change Watcher and Publisher is a framework that emits events when a row has been changed in a Cloud Spanner database. These row change events can be captured and processed in-process as part of a user application, or they can be published to Google Cloud Pubsub for consumption by any other application.</description>
   <url>https://github.com/cloudspannerecosystem/spanner-change-watcher</url>
@@ -24,11 +24,11 @@
   <distributionManagement>
     <snapshotRepository>
       <id>sonatype-nexus-snapshots</id>
-      <url>https://google.oss.sonatype.org/content/repositories/snapshots</url>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
     </snapshotRepository>
     <repository>
       <id>sonatype-nexus-staging</id>
-      <url>https://google.oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
     </repository>
   </distributionManagement>
   <scm>
@@ -55,11 +55,11 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <skipITs>true</skipITs>
     
-    <avro.version>1.9.2</avro.version>
+    <avro.version>1.11.0</avro.version>
     
-    <gax.version>1.60.1</gax.version>
+    <gax.version>1.67.0</gax.version>
     <junit.version>4.13.1</junit.version>
-    <truth.version>1.0.1</truth.version>
+    <truth.version>1.1.3</truth.version>
     <mockito.version>3.3.3</mockito.version>
   </properties>
   
@@ -68,7 +68,7 @@
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-watcher</artifactId>
-        <version>1.2.0</version>
+        <version>1.2.1</version>
         <exclusions>
           <exclusion>
             <groupId>org.conscrypt</groupId>
@@ -79,12 +79,12 @@
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-publisher</artifactId>
-        <version>1.2.0</version>
+        <version>1.2.1</version>
       </dependency>
       <dependency>
         <groupId>com.google.cloudspannerecosystem</groupId>
         <artifactId>google-cloud-spanner-change-archiver</artifactId>
-        <version>1.2.0</version>
+        <version>1.2.1</version>
       </dependency>
       
       <dependency>
@@ -98,7 +98,7 @@
       <dependency>
         <groupId>com.google.cloud</groupId>
         <artifactId>libraries-bom</artifactId>
-        <version>24.1.0</version>
+        <version>24.1.1</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -149,7 +149,7 @@
           <extensions>true</extensions>
           <configuration>
             <serverId>ossrh</serverId>
-            <nexusUrl>https://google.oss.sonatype.org/</nexusUrl>
+            <nexusUrl>https://oss.sonatype.org/</nexusUrl>
             <autoReleaseAfterClose>true</autoReleaseAfterClose>
           </configuration>
         </plugin>
@@ -372,7 +372,7 @@
       <repositories>
         <repository>
           <id>sonatype-snapshots</id>
-          <url>https://google.oss.sonatype.org/content/repositories/snapshots</url>
+          <url>https://oss.sonatype.org/content/repositories/snapshots</url>
           <releases>
             <enabled>false</enabled>
           </releases>

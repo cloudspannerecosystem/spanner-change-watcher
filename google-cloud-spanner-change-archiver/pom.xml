@@ -8,7 +8,7 @@
   <parent>
     <groupId>com.google.cloudspannerecosystem</groupId>
     <artifactId>spanner-change-watcher</artifactId>
-    <version>1.2.0</version>
+    <version>1.2.1</version>
   </parent>
   
   <properties>
@@ -81,14 +81,14 @@
     <dependency>
       <groupId>com.google.cloudspannerecosystem</groupId>
       <artifactId>google-cloud-spanner-change-watcher</artifactId>
-      <version>1.2.0</version>
+      <version>1.2.1</version>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.google.cloudspannerecosystem</groupId>
       <artifactId>google-cloud-spanner-change-publisher</artifactId>
-      <version>1.2.0</version>
+      <version>1.2.1</version>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
