@@ -1,5 +1,9 @@
 # Google Cloud Spanner Change Watcher and Publisher
 
+Cloud Spanner has officially released native change streams support, which is recommended instead of this solution.
+
+For more information see https://cloud.google.com/spanner/docs/change-streams.
+
 ## Introduction
 Google Cloud Spanner Change Watcher and Publisher is a framework that emits
 events when a row has been changed in a Cloud Spanner database. These row
