@@ -1,5 +1,9 @@
 # Spanner Change Publisher
 
+__Cloud Spanner has officially released native change streams support, which is recommended instead of this solution.__
+
+For more information see https://cloud.google.com/spanner/docs/change-streams.
+
 ## Introduction
 Spanner Change Publisher watches a Spanner database for changes and publishes
 these changes to Pubsub. It can monitor a single table, a set of tables, or all
@@ -234,6 +238,8 @@ subscriber.startAsync().awaitRunning();
 ```
 
 ## Limitations
+* Cloud Spanner has officially released native change streams support, which is recommended instead of this solution.
+  For more information see https://cloud.google.com/spanner/docs/change-streams.
 * Spanner Change Publisher use [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to determine when a
   change has occurred. They cannot be used on tables that do not include a commit timestamp.
 * Deletes are not detected, unless these are soft deletes that only update a deleted flag in the corresponding table.

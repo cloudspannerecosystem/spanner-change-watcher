@@ -1,6 +1,6 @@
 # Google Cloud Spanner Change Watcher and Publisher
 
-Cloud Spanner has officially released native change streams support, which is recommended instead of this solution.
+__Cloud Spanner has officially released native change streams support, which is recommended instead of this solution.__
 
 For more information see https://cloud.google.com/spanner/docs/change-streams.
 
@@ -111,6 +111,8 @@ See [Spanner Change Archiver README file](./google-cloud-spanner-change-archiver
 for more information.
 
 ## Limitations
+* Cloud Spanner has officially released native change streams support, which is recommended instead of this solution.
+  For more information see https://cloud.google.com/spanner/docs/change-streams.
 * Spanner Change Watcher and Spanner Change Publisher by default use
   [commit timestamps](https://cloud.google.com/spanner/docs/commit-timestamp) to determine when a
   change has occurred. Tables that do not include a commit timestamp can also be monitored, but require

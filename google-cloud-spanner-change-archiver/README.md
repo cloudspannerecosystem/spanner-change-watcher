@@ -1,4 +1,8 @@
 # Spanner Change Archiver
+__Cloud Spanner has officially released native change streams support, which is recommended instead of this solution.__
+
+For more information see https://cloud.google.com/spanner/docs/change-streams.
+
 Spanner Change Archiver is an example application using a Spanner Change
 Publisher to publish changes in a Google Cloud Spanner database to a Pubsub
 topic. This topic is used as a trigger for a Google Cloud Function that writes
