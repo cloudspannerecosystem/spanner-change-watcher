@@ -306,32 +306,32 @@ public class SpannerToAvroFactory implements ConverterFactory {
                 logger.log(Level.FINE, "Made ARRAY<JSON>");
                 if (nullable) {
                   avroSchemaBuilder
-                          .name(name)
-                          .type()
-                          .unionOf()
-                          .nullType()
-                          .and()
-                          .array()
-                          .items()
-                          .unionOf()
-                          .nullType()
-                          .and()
-                          .stringType()
-                          .endUnion()
-                          .endUnion()
-                          .noDefault();
+                      .name(name)
+                      .type()
+                      .unionOf()
+                      .nullType()
+                      .and()
+                      .array()
+                      .items()
+                      .unionOf()
+                      .nullType()
+                      .and()
+                      .stringType()
+                      .endUnion()
+                      .endUnion()
+                      .noDefault();
                 } else {
                   avroSchemaBuilder
-                          .name(name)
-                          .type()
-                          .array()
-                          .items()
-                          .unionOf()
-                          .nullType()
-                          .and()
-                          .stringType()
-                          .endUnion()
-                          .noDefault();
+                      .name(name)
+                      .type()
+                      .array()
+                      .items()
+                      .unionOf()
+                      .nullType()
+                      .and()
+                      .stringType()
+                      .endUnion()
+                      .noDefault();
                 }
                 break;
               case "STRING":

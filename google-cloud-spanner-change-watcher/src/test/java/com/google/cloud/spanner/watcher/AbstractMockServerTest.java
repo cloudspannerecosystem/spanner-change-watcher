@@ -698,8 +698,7 @@ public abstract class AbstractMockServerTest {
     ResultSet fooResults = new RandomResultSetGenerator(SELECT_FOO_ROW_COUNT).generate();
     Timestamp maxFooCommitTimestamp = RandomResultSetGenerator.getMaxCommitTimestamp(fooResults);
     currentFooPollStatement =
-        SELECT_FOO_STATEMENT
-            .toBuilder()
+        SELECT_FOO_STATEMENT.toBuilder()
             .bind("prevCommitTimestamp")
             .to(maxFooCommitTimestamp)
             .build();
@@ -712,8 +711,7 @@ public abstract class AbstractMockServerTest {
     Timestamp maxFooWithShardingCommitTimestamp =
         RandomResultSetGenerator.getMaxCommitTimestamp(fooWithShardingResults);
     currentFooWithShardingPollStatement =
-        SELECT_FOO_WITH_SHARDING_PER_DAY_STATEMENT
-            .toBuilder()
+        SELECT_FOO_WITH_SHARDING_PER_DAY_STATEMENT.toBuilder()
             .bind("prevCommitTimestamp")
             .to(maxFooWithShardingCommitTimestamp)
             .build();
@@ -728,8 +726,7 @@ public abstract class AbstractMockServerTest {
     Timestamp maxFooWithNotNullShardingCommitTimestamp =
         RandomResultSetGenerator.getMaxCommitTimestamp(fooWithNotNullShardingResults);
     currentFooWithNotNullShardingPollStatement =
-        SELECT_FOO_WITH_NOT_NULL_SHARDING_STATEMENT
-            .toBuilder()
+        SELECT_FOO_WITH_NOT_NULL_SHARDING_STATEMENT.toBuilder()
             .bind("prevCommitTimestamp")
             .to(maxFooWithNotNullShardingCommitTimestamp)
             .build();
@@ -746,8 +743,7 @@ public abstract class AbstractMockServerTest {
     ResultSet barResults = new RandomResultSetGenerator(SELECT_BAR_ROW_COUNT).generate();
     Timestamp maxBarCommitTimestamp = RandomResultSetGenerator.getMaxCommitTimestamp(barResults);
     currentBarPollStatement =
-        SELECT_BAR_STATEMENT
-            .toBuilder()
+        SELECT_BAR_STATEMENT.toBuilder()
             .bind("prevCommitTimestamp")
             .to(maxBarCommitTimestamp)
             .build();

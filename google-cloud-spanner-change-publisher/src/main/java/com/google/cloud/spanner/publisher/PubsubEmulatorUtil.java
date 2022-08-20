@@ -21,6 +21,7 @@ import com.google.api.gax.grpc.GrpcTransportChannel;
 import com.google.api.gax.rpc.AlreadyExistsException;
 import com.google.api.gax.rpc.FixedTransportChannelProvider;
 import com.google.api.gax.rpc.TransportChannelProvider;
+import com.google.cloud.pubsub.v1.MessageReceiver;
 import com.google.cloud.pubsub.v1.Subscriber;
 import com.google.cloud.pubsub.v1.SubscriptionAdminClient;
 import com.google.cloud.pubsub.v1.SubscriptionAdminSettings;
@@ -30,9 +31,7 @@ import io.grpc.ManagedChannelBuilder;
 import java.io.IOException;
 import java.util.logging.Logger;
 
-/**
- * Util class for automatically generating test topics on a Pubsub Emulator instance.
- */
+/** Util class for automatically generating test topics on a Pubsub Emulator instance. */
 class PubsubEmulatorUtil {
 
   static void maybeCreateSubscriptions(String project, String topic, String subscription) {
@@ -50,8 +49,7 @@ class PubsubEmulatorUtil {
                   .setCredentialsProvider(NoCredentialsProvider.create())
                   .build());
       client.createSubscription(
-          String.format(
-              "projects/%s/subscriptions/%s", project, subscription),
+          String.format("projects/%s/subscriptions/%s", project, subscription),
           String.format("projects/%s/topics/%s", project, topic),
           PushConfig.getDefaultInstance(),
           10);
@@ -69,18 +67,17 @@ class PubsubEmulatorUtil {
             .build();
     TransportChannelProvider channelProvider =
         FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel));
-    return
-        Subscriber.newBuilder(
-                String.format(
-                    "projects/%s/subscriptions/spanner-update-%s-%s",
-                    config.getPubsubProject(), config.getDatabaseId().getDatabase(), table),
+    return Subscriber.newBuilder(
+            String.format(
+                "projects/%s/subscriptions/spanner-update-%s-%s",
+                config.getPubsubProject(), config.getDatabaseId().getDatabase(), table),
+            (MessageReceiver)
                 (message, consumer) -> {
                   logger.info("Received message: " + message.toString());
                   consumer.ack();
                 })
-            .setCredentialsProvider(NoCredentialsProvider.create())
-            .setChannelProvider(channelProvider)
-            .build();
+        .setCredentialsProvider(NoCredentialsProvider.create())
+        .setChannelProvider(channelProvider)
+        .build();
   }
-
 }

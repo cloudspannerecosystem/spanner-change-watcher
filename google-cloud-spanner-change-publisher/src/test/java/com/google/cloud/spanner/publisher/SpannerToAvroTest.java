@@ -369,31 +369,36 @@ public class SpannerToAvroTest {
             "commitTimestamp");
     int index = 1;
     Schema schema = set.avroSchema();
-    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().longType());
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().longType());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
     assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().longType().endUnion());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().booleanType());
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().booleanType());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
     assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().booleanType().endUnion());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().bytesType());
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().bytesType());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
     assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().bytesType().endUnion());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().stringType());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
     assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
-    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().doubleType());
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().doubleType());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
     assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().doubleType().endUnion());
@@ -401,28 +406,32 @@ public class SpannerToAvroTest {
 
     // DATE, TIMESTAMP, NUMERIC and JSON are all handled as STRING.
     // DATE
-    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().stringType());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
     assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
     // TIMESTAMP
-    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().stringType());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
     assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
     // NUMERIC
-    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().stringType());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
     assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isTrue();
 
     // JSON
-    assertThat(schema.getField(String.format("C%d", index)).schema()).isEqualTo(SchemaBuilder.builder().stringType());
+    assertThat(schema.getField(String.format("C%d", index)).schema())
+        .isEqualTo(SchemaBuilder.builder().stringType());
     assertThat(schema.getField(String.format("C%d", index++)).schema().isNullable()).isFalse();
     assertThat(schema.getField(String.format("C%d", index)).schema())
         .isEqualTo(SchemaBuilder.builder().unionOf().nullType().and().stringType().endUnion());
@@ -816,7 +825,8 @@ public class SpannerToAvroTest {
     assertThat(record.get(String.format("C%d", index++))).isNull();
     assertThat(record.get(String.format("C%d", index++))).isEqualTo(true);
     assertThat(record.get(String.format("C%d", index++))).isNull();
-    assertThat(record.get(String.format("C%d", index++))).isEqualTo(ByteBuffer.wrap("TEST".getBytes()));
+    assertThat(record.get(String.format("C%d", index++)))
+        .isEqualTo(ByteBuffer.wrap("TEST".getBytes()));
     assertThat(record.get(String.format("C%d", index++))).isNull();
     assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("TEST"));
     assertThat(record.get(String.format("C%d", index++))).isNull();
@@ -824,16 +834,20 @@ public class SpannerToAvroTest {
     assertThat(record.get(String.format("C%d", index++))).isNull();
     assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("2020-03-31"));
     assertThat(record.get(String.format("C%d", index++))).isNull();
-    assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("2020-03-31T21:21:15.120000000Z"));
+    assertThat(record.get(String.format("C%d", index++)))
+        .isEqualTo(new Utf8("2020-03-31T21:21:15.120000000Z"));
     assertThat(record.get(String.format("C%d", index++))).isNull();
     assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("3.14"));
     assertThat(record.get(String.format("C%d", index++))).isNull();
-    assertThat(record.get(String.format("C%d", index++))).isEqualTo(new Utf8("{\"key\": \"value\"}"));
+    assertThat(record.get(String.format("C%d", index++)))
+        .isEqualTo(new Utf8("{\"key\": \"value\"}"));
     assertThat(record.get(String.format("C%d", index++))).isNull();
     // ARRAY types
-    assertThat(record.get(String.format("C%d", index++))).isEqualTo(Arrays.asList(1L, null, 3L, null, 5L));
+    assertThat(record.get(String.format("C%d", index++)))
+        .isEqualTo(Arrays.asList(1L, null, 3L, null, 5L));
     assertThat(record.get(String.format("C%d", index++))).isNull();
-    assertThat(record.get(String.format("C%d", index++))).isEqualTo(Arrays.asList(true, null, false, null));
+    assertThat(record.get(String.format("C%d", index++)))
+        .isEqualTo(Arrays.asList(true, null, false, null));
     assertThat(record.get(String.format("C%d", index++))).isNull();
     assertThat(record.get(String.format("C%d", index++)))
         .isEqualTo(
@@ -843,7 +857,8 @@ public class SpannerToAvroTest {
     assertThat(record.get(String.format("C%d", index++)))
         .isEqualTo(Arrays.asList(new Utf8("TEST"), null, new Utf8("FOO"), null));
     assertThat(record.get(String.format("C%d", index++))).isNull();
-    assertThat(record.get(String.format("C%d", index++))).isEqualTo(Arrays.asList(3.14D, null, 6.626D, null));
+    assertThat(record.get(String.format("C%d", index++)))
+        .isEqualTo(Arrays.asList(3.14D, null, 6.626D, null));
     assertThat(record.get(String.format("C%d", index++))).isNull();
     assertThat(record.get(String.format("C%d", index++)))
         .isEqualTo(Arrays.asList(new Utf8("2020-03-31"), null, new Utf8("1970-01-01"), null));
@@ -860,7 +875,9 @@ public class SpannerToAvroTest {
         .isEqualTo(Arrays.asList(new Utf8("3.14"), null, new Utf8("6.6260"), null));
     assertThat(record.get(String.format("C%d", index++))).isNull();
     assertThat(record.get(String.format("C%d", index++)))
-        .isEqualTo(Arrays.asList(new Utf8("{\"key1\": \"val1\"}"), null, new Utf8("{\"key2\": \"val2\"}"), null));
+        .isEqualTo(
+            Arrays.asList(
+                new Utf8("{\"key1\": \"val1\"}"), null, new Utf8("{\"key2\": \"val2\"}"), null));
     assertThat(record.get(String.format("C%d", index++))).isNull();
   }
 
