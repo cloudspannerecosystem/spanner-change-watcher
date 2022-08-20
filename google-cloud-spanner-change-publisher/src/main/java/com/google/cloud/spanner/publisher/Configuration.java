@@ -203,7 +203,9 @@ class Configuration {
     Configuration config = new Configuration();
 
     // General settings.
-    config.demoMode = Boolean.valueOf(MoreObjects.firstNonNull(getSystemOrDefaultProperty("demoMode", defaults), "false"));
+    config.demoMode =
+        Boolean.valueOf(
+            MoreObjects.firstNonNull(getSystemOrDefaultProperty("demoMode", defaults), "false"));
     config.maxWaitForShutdownSeconds =
         Long.valueOf(
             MoreObjects.firstNonNull(

@@ -222,14 +222,12 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
             Timestamp.ofTimeSecondsAndNanos(
                 lastSeenCommitTimestamp.getSeconds() + 1, lastSeenCommitTimestamp.getNanos());
         Statement pollStatement1 =
-            SELECT_FOO_STATEMENT
-                .toBuilder()
+            SELECT_FOO_STATEMENT.toBuilder()
                 .bind("prevCommitTimestamp")
                 .to(lastSeenCommitTimestamp)
                 .build();
         Statement pollStatement2 =
-            SELECT_FOO_STATEMENT
-                .toBuilder()
+            SELECT_FOO_STATEMENT.toBuilder()
                 .bind("prevCommitTimestamp")
                 .to(nextCommitTimestamp)
                 .build();
@@ -320,12 +318,9 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
   public void testFixedCommitTimestampColumn() throws Exception {
     Timestamp ts = Timestamp.now();
     ResultSetMetadata metadata =
-        RandomResultSetGenerator.METADATA
-            .toBuilder()
+        RandomResultSetGenerator.METADATA.toBuilder()
             .setRowType(
-                RandomResultSetGenerator.METADATA
-                    .getRowType()
-                    .toBuilder()
+                RandomResultSetGenerator.METADATA.getRowType().toBuilder()
                     .setFields(
                         RandomResultSetGenerator.METADATA.getRowType().getFieldsCount() - 1,
                         Field.newBuilder()
@@ -350,10 +345,7 @@ public class SpannerTableTailerTest extends AbstractMockServerTest {
         StatementResult.query(
             statement,
             new RandomResultSetGenerator(1)
-                .generateWithFixedCommitTimestamp(ts)
-                .toBuilder()
-                .setMetadata(metadata)
-                .build()));
+                .generateWithFixedCommitTimestamp(ts).toBuilder().setMetadata(metadata).build()));
     mockSpanner.putStatementResult(
         StatementResult.query(
             statement.toBuilder().bind("prevCommitTimestamp").to(ts).build(),

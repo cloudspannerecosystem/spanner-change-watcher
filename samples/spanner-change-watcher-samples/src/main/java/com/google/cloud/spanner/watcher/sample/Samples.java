@@ -697,12 +697,11 @@ public class Samples {
    *
    * <ol>
    *   <li>A table that has been updated using DML with a PENDING_COMMIT_TIMESTAMP() function call
-   *       will no longer be readable during the remainder of the transaction.
-   *       See also https://cloud.google.com/spanner/docs/commit-timestamp#dml
+   *       will no longer be readable during the remainder of the transaction. See also
+   *       https://cloud.google.com/spanner/docs/commit-timestamp#dml
    *   <li>A commit timestamp column alone should not be indexed. Instead, it should only be
    *       included in an index where the first part of the index is not a monotonically increasing
-   *       value.
-   *       See also https://cloud.google.com/spanner/docs/commit-timestamp#keys-indexes
+   *       value. See also https://cloud.google.com/spanner/docs/commit-timestamp#keys-indexes
    * </ol>
    *
    * An application can use a {@link SpannerTableChangeSetPoller} or {@link

@@ -254,12 +254,9 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
   public void testCustomCommitTimestampColumn() throws Exception {
     Timestamp ts = Timestamp.now();
     ResultSetMetadata metadata =
-        RandomResultSetGenerator.METADATA
-            .toBuilder()
+        RandomResultSetGenerator.METADATA.toBuilder()
             .setRowType(
-                RandomResultSetGenerator.METADATA
-                    .getRowType()
-                    .toBuilder()
+                RandomResultSetGenerator.METADATA.getRowType().toBuilder()
                     .setFields(
                         RandomResultSetGenerator.METADATA.getRowType().getFieldsCount() - 1,
                         Field.newBuilder()
@@ -284,10 +281,7 @@ public class SpannerDatabaseTailerTest extends AbstractMockServerTest {
         StatementResult.query(
             statement,
             new RandomResultSetGenerator(1)
-                .generateWithFixedCommitTimestamp(ts)
-                .toBuilder()
-                .setMetadata(metadata)
-                .build()));
+                .generateWithFixedCommitTimestamp(ts).toBuilder().setMetadata(metadata).build()));
     mockSpanner.putStatementResult(
         StatementResult.query(
             statement.toBuilder().bind("prevCommitTimestamp").to(ts).build(),
