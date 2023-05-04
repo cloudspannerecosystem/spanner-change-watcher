@@ -7,7 +7,7 @@ jobs:
         type: boolean
         default: false
     docker:
-    - image: circleci/openjdk:8-jdk-node
+    - image: cimg/openjdk:8.0-node
     steps:
     - checkout
     - run:
