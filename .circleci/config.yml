@@ -7,7 +7,7 @@ jobs:
         type: boolean
         default: false
     docker:
-    - image: circleci/openjdk:8-jdk-node
+    - image: cimg/openjdk:8.0-node
     steps:
     - checkout
     - run:
@@ -24,20 +24,20 @@ jobs:
     - run:
         name: set credentials
         command: |
-          echo $GCLOUD_SERVICE_KEY > $HOME/gcloud-service-key.json
+          echo $GCLOUD_SERVICE_KEY2 > $HOME/gcloud-service-key.json
           echo 'export GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud-service-key.json' >> $BASH_ENV
     - when:
         condition: << parameters.run-stress-tests >>
         steps:
           - run: 
               name: Run Integration and Stress Tests
-              command: mvn -B -Penable-integration-tests -Pstress-integration-tests -DtrimStackTrace=false -Dspanner.instance=continuous-integration-test -fae verify --settings 'pom.xml'
+              command: mvn -B -Penable-integration-tests -Pstress-integration-tests -DtrimStackTrace=false -Dspanner.instance=spanner-change-watcher-test -fae verify --settings 'pom.xml'
     - unless:
         condition: << parameters.run-stress-tests >>
         steps:
             - run:
                 name: Run Integration Tests
-                command: mvn -B -Penable-integration-tests -DtrimStackTrace=false -Dspanner.instance=continuous-integration-test -fae verify
+                command: mvn -B -Penable-integration-tests -DtrimStackTrace=false -Dspanner.instance=spanner-change-watcher-test -fae verify
     - save_cache:
         paths:
         - ~/.m2
