@@ -7,7 +7,7 @@ jobs:
         type: boolean
         default: false
     docker:
-    - image: cimg/openjdk:8.0-node
+    - image: cimg/openjdk:8.0.504-node
     steps:
     - checkout
     - run:
